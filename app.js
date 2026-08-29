@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
 const CHAT = 'https://t.me/Members_6x6';           // общий чат участников
-const SUPPORT = 'Nickbv';        // без @, сюда пишут при поломках
+const SUPPORT = 'ВСТАВЬ_НИК_ДЛЯ_ПОДДЕРЖКИ';        // без @, сюда пишут при поломках
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -159,6 +159,21 @@ function renderMatches() {
     const ax = +el.dataset.axis;
     el.onclick = () => openList('axis', ax, label(ax, S.answers[ax - 1]));
   });
+
+  const nb = $('#m-notify');
+  const botOk = d.me?.bot_ok;
+  nb.hidden = !!botOk;
+  if (!botOk) {
+    nb.innerHTML = `<button class="row call quiet">
+      <span style="font-size:17px;width:24px;flex:none">🔔</span>
+      <div class="grow">Включите уведомления<div class="sub">иначе не узнаете о новых совпадениях</div></div>
+      <span class="chev">›</span></button>`;
+    nb.querySelector('.row').onclick = () => {
+      haptic();
+      const url = `https://t.me/${BOT}?start=notify`;
+      tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank');
+    };
+  }
 
   const inb = d.pending_in ?? 0;
   const box = $('#m-inbox');
@@ -351,7 +366,7 @@ const notifyToggle = async () => {
 $('#me-n6').onclick = (e) => { e.target.classList.toggle('on'); notifyToggle(); };
 $('#me-n5').onclick = (e) => { e.target.classList.toggle('on'); notifyToggle(); };
 
-const inviteLink = () => `https://t.me/${BOT}?start=${S.inviteCode}`;
+const inviteLink = () => `https://t.me/${BOT}/app?startapp=${S.inviteCode}`;
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch { /* см. ниже */ }
@@ -469,11 +484,19 @@ function scan() {
 
 /* ── навигация ── */
 function fitNav() {
+  const safe = Math.max(
+    tg?.safeAreaInset?.bottom ?? 0,
+    tg?.contentSafeAreaInset?.bottom ?? 0,
+    22,                                   // запас под плашку Telegram
+  );
+  document.documentElement.style.setProperty('--tgsafe', safe + 'px');
   const n = $('#nav');
   if (!n || n.hidden) return;
   document.documentElement.style.setProperty('--navh', n.offsetHeight + 'px');
 }
 addEventListener('resize', fitNav);
+tg?.onEvent?.('safeAreaChanged', fitNav);
+tg?.onEvent?.('viewportChanged', fitNav);
 
 function go(id) {
   pane('#' + id);

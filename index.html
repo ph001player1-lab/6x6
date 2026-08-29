@@ -73,6 +73,7 @@ header h1{font-family:var(--display);font-size:15px;font-weight:700;margin:0;let
 .row.call{border:1px solid var(--honey);border-radius:14px;padding:15px 14px;margin-bottom:16px;
   background:rgba(232,163,61,.07)}
 .row.call .cnt{color:var(--honey)}
+.row.call.quiet{border-color:var(--line);background:var(--comb)}
 .sect{margin-top:26px}
 .sect > .lbl{display:block;margin-bottom:6px}
 
@@ -181,7 +182,10 @@ h2{font-family:var(--display);font-size:24px;line-height:1.15;margin:0 0 20px;le
 /* ── навигация ── */
 nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;
   background:rgba(7,11,10,.94);backdrop-filter:blur(14px);border-top:1px solid var(--line);
-  padding-bottom:env(safe-area-inset-bottom);max-width:560px;margin:0 auto}
+  /* Telegram рисует внизу мини-аппа свою плашку-ручку: под неё нужен отступ,
+     иначе она перекрывает среднюю вкладку. */
+  padding-bottom:calc(env(safe-area-inset-bottom) + var(--tgsafe, 22px));
+  max-width:560px;margin:0 auto}
 nav.n3{grid-template-columns:repeat(3,1fr)} nav.n4{grid-template-columns:repeat(4,1fr)}
 nav button{position:relative;background:none;border:0;color:var(--moss);padding:11px 4px 13px;cursor:pointer;
   display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;
@@ -261,6 +265,7 @@ nav[hidden],header[hidden]{display:none}
 <div class="pane" id="p-match">
   <div class="hero" id="m-hero"></div>
   <div class="rows" id="m-inbox" hidden></div>
+  <div class="rows" id="m-notify" hidden></div>
   <button class="btn two scan" id="scan-main"><span class="gl">⬡</span><span><b>Сканировать</b><i>код другого игрока при личной встрече</i></span></button>
   <div style="height:18px"></div>
   <div class="rows" id="m-scores"></div>
