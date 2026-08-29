@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
 const CHAT = 'https://t.me/Members_6x6';           // общий чат участников
-const SUPPORT = 'Nickbv';        // без @, сюда пишут при поломках
+const SUPPORT = 'ВСТАВЬ_НИК_ДЛЯ_ПОДДЕРЖКИ';        // без @, сюда пишут при поломках
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -43,6 +43,19 @@ const toast = (t, ms = 2600) => {
 const haptic = (k) => { try { k === 'ok'
   ? tg.HapticFeedback.notificationOccurred('success')
   : tg.HapticFeedback.impactOccurred('light'); } catch { /* не критично */ } };
+
+/* Оверлеи закрываются системной кнопкой Telegram и аппаратной «назад». */
+const overlays = [];
+function pushOverlay(close) {
+  overlays.push(close);
+  try { tg.BackButton.show(); } catch { /* старый клиент — остаётся кнопка в углу */ }
+}
+function popOverlay() {
+  const close = overlays.pop();
+  if (close) close();
+  if (!overlays.length) { try { tg.BackButton.hide(); } catch { /* см. выше */ } }
+}
+try { tg.BackButton.onClick(popOverlay); } catch { /* старый клиент */ }
 
 function pane(id) {
   $$('.pane').forEach((p) => p.classList.remove('on'));
@@ -247,6 +260,7 @@ async function openList(kind, value, title) {
   $('#l-title').textContent = title;
   $('#l-body').innerHTML = '<div class="empty">Ищем…</div>';
   $('#c-list').classList.add('on');
+  pushOverlay(() => $('#c-list').classList.remove('on'));
   try {
     const rows = await rpc('match_list',
       { filter_kind: kind, filter_value: value, lim: 60, radius_km: 5 });
@@ -267,7 +281,7 @@ async function openList(kind, value, title) {
     $$('#l-body .row').forEach((el) => el.onclick = () => openPerson(rows[+el.dataset.i]));
   } catch (e) { $('#l-body').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
-$('#l-back').onclick = () => $('#c-list').classList.remove('on');
+$('#l-back').onclick = popOverlay;
 
 /* ── карточка человека ── */
 function openPerson(p) {
@@ -331,10 +345,13 @@ function openPerson(p) {
       } catch (e) { toast(e.message); act.disabled = false; }
     };
   }
+  if (!$('#c-person').classList.contains('on')) {
+    pushOverlay(() => $('#c-person').classList.remove('on'));
+  }
   $('#c-person').classList.add('on');
   haptic();
 }
-$('#pr-close').onclick = () => $('#c-person').classList.remove('on');
+$('#pr-close').onclick = popOverlay;
 
 /* ── вкладка «Я» ── */
 function renderMe() {
@@ -539,6 +556,13 @@ function scan() {
 
 /* ── навигация ── */
 function fitNav() {
+  const top = Math.max(
+    tg?.contentSafeAreaInset?.top ?? 0,
+    tg?.safeAreaInset?.top ?? 0,
+    0,
+  );
+  document.documentElement.style.setProperty('--tgtop', top + 'px');
+
   const safe = Math.max(
     tg?.safeAreaInset?.bottom ?? 0,
     tg?.contentSafeAreaInset?.bottom ?? 0,
