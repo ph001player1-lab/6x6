@@ -1,24 +1,37 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-/* Настройки живут в config.js — этот файл править не нужно. */
-const CFG = window.SIX_CONFIG ?? {};
-const clean = (v) => String(v ?? '').trim();
-const SUPABASE_URL  = clean(CFG.SUPABASE_URL).replace(/\/+$/, '');
-const SUPABASE_ANON = clean(CFG.SUPABASE_ANON);
-const BOT           = clean(CFG.BOT).replace(/^@/, '');
-const CHAT          = clean(CFG.CHAT) || 'https://t.me/Members_6x6';
-const SUPPORT       = clean(CFG.SUPPORT).replace(/^@/, '');
+/* Настройки лежат в config.json и грузятся мимо кеша: иначе браузер
+   надолго запоминает файл, скачанный до того, как его заполнили. */
+let SUPABASE_URL = '', SUPABASE_ANON = '', BOT = '';
+let CHAT = 'https://t.me/Members_6x6', SUPPORT = '';
 
-/* Значение заголовка обязано быть латиницей. Незаполненная настройка с моим
-   placeholder-ом кириллицей роняет fetch с невнятной ошибкой про ISO-8859-1,
-   поэтому проверяем заранее и говорим по-человечески. */
-function configProblems() {
+async function loadConfig() {
+  let c;
+  try {
+    const r = await fetch('config.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(String(r.status));
+    c = await r.json();
+  } catch (e) {
+    throw new Error('Не удалось прочитать config.json рядом с приложением (' + e.message + ')');
+  }
+  const clean = (v) => String(v ?? '').trim();
+  SUPABASE_URL  = clean(c.SUPABASE_URL).replace(/\/+$/, '');
+  SUPABASE_ANON = clean(c.SUPABASE_ANON);
+  BOT           = clean(c.BOT).replace(/^@/, '');
+  CHAT          = clean(c.CHAT) || CHAT;
+  SUPPORT       = clean(c.SUPPORT).replace(/^@/, '');
+
+  /* Значение заголовка обязано быть латиницей: незаполненная настройка
+     кириллицей роняет fetch невнятной ошибкой про ISO-8859-1. */
   const latin = (v) => /^[\x20-\x7E]*$/.test(v);
   const bad = [];
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(SUPABASE_URL)) bad.push('SUPABASE_URL');
   if (!SUPABASE_ANON || !latin(SUPABASE_ANON)) bad.push('SUPABASE_ANON');
   if (!/^[A-Za-z0-9_]{3,64}$/.test(BOT)) bad.push('BOT');
-  return bad;
+  if (bad.length) {
+    throw new Error('В файле config.json не заполнено: ' + bad.join(', ') +
+      '. Впишите значения из Supabase → Settings → API и от BotFather.');
+  }
 }
 
 const tg = window.Telegram?.WebApp;
@@ -620,10 +633,11 @@ function fitNav() {
   );
   document.documentElement.style.setProperty('--tgtop', top + 'px');
 
+  const mobile = ['android', 'android_x', 'ios'].includes(tg?.platform ?? '');
   const safe = Math.max(
     tg?.safeAreaInset?.bottom ?? 0,
     tg?.contentSafeAreaInset?.bottom ?? 0,
-    22,                                   // запас под плашку Telegram
+    mobile ? 22 : 0,          // плашка-ручка есть только в мобильных клиентах
   );
   document.documentElement.style.setProperty('--tgsafe', safe + 'px');
   const n = $('#nav');
@@ -670,11 +684,7 @@ async function loadAll() {
 
 (async function boot() {
   try {
-    const bad = configProblems();
-    if (bad.length) {
-      throw new Error('В файле config.js не заполнено: ' + bad.join(', ') +
-        '. Впишите значения из Supabase → Settings → API и от BotFather.');
-    }
+    await loadConfig();
 
     if (tg) {
       tg.ready(); tg.expand();
@@ -710,6 +720,7 @@ async function loadAll() {
     if (ready) {
       $('#nav').hidden = false; $('#top').hidden = false;
       fitNav();
+      [80, 300, 800].forEach((ms) => setTimeout(fitNav, ms));   // окно устаканивается не сразу
       go('p-match');
     } else {
       pane('#p-intro');            // шапку и вкладки покажем после шести ответов
