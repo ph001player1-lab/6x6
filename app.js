@@ -1,9 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -157,6 +157,17 @@ function renderMatches() {
     el.onclick = () => openList('axis', ax, label(ax, S.answers[ax - 1]));
   });
 
+  const inb = d.pending_in ?? 0;
+  const box = $('#m-inbox');
+  box.hidden = !inb;
+  if (inb) {
+    box.innerHTML = `<button class="row call">
+      <span style="font-size:17px;width:24px;flex:none">✉️</span>
+      <div class="grow">Запросы на контакт<div class="sub">хотят с вами общаться</div></div>
+      <span class="cnt">${inb}</span><span class="chev">›</span></button>`;
+    box.querySelector('.row').onclick = () => openList('inbox', null, 'Входящие запросы');
+  }
+
   loadNearby();
 }
 
@@ -184,7 +195,8 @@ async function loadNearby() {
 /* ── список людей ── */
 async function openList(kind, value, title) {
   $('#l-kind').textContent = kind === 'axis' ? 'Совпали по сфере'
-    : kind === 'score' ? 'Совпадение' : 'Рядом сейчас';
+    : kind === 'score' ? 'Совпадение'
+    : kind === 'inbox' ? 'Ждут вашего ответа' : 'Рядом сейчас';
   $('#l-title').textContent = title;
   $('#l-body').innerHTML = '<div class="empty">Ищем…</div>';
   $('#c-list').classList.add('on');
@@ -198,10 +210,13 @@ async function openList(kind, value, title) {
         <div class="grow"><div>${p.first_name}</div>
           <div class="sub">${p.score} из 6${p.proximity ? ' · ' + p.proximity : ''}${
             p.contact_status === 'accepted' ? ' · контакт открыт'
+            : p.contact_status === 'pending' && p.contact_dir === 'in' ? ' · ждёт вашего ответа'
             : p.contact_status === 'pending' ? ' · запрос отправлен' : ''}</div></div>
         <div style="width:26px;flex:none">${rosette(p.hits, 26, { jack: p.score === 6 })}</div>
         <span class="chev">›</span></button>`).join('')
-      : '<div class="empty">Здесь пока никого.<br>Позовите друзей — улей растёт от каждого.</div>';
+      : (kind === 'inbox'
+          ? '<div class="empty">Входящих запросов нет.</div>'
+          : '<div class="empty">Здесь пока никого.<br>Позовите друзей — улей растёт от каждого.</div>');
     $$('#l-body .row').forEach((el) => el.onclick = () => openPerson(rows[+el.dataset.i]));
   } catch (e) { $('#l-body').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
@@ -220,15 +235,38 @@ function openPerson(p) {
       <span class="tx">${h ? GAINS[i] : SPHERES[i] + ' — разошлись'}</span>
       <span class="mk">${h ? '✓' : '—'}</span></div>`).join('');
 
-  const act = $('#pr-act');
-  if (p.contact_status === 'accepted') {
+  const act = $('#pr-act'), act2 = $('#pr-act2');
+  act.disabled = false; act2.hidden = true; act2.onclick = null;
+
+  const answer = async (yes) => {
+    act.disabled = true;
+    try {
+      await rpc('respond_contact', { req_id: p.contact_id, accept: yes });
+      haptic('ok');
+      p.contact_status = yes ? 'accepted' : 'declined';
+      toast(yes ? 'Контакт открыт' : 'Отклонено');
+      await loadAll(); openPerson(p);
+    } catch (e) { toast(e.message); act.disabled = false; }
+  };
+
+  if (p.contact_status === 'pending' && p.contact_dir === 'in') {
+    act.textContent = 'Принять запрос';
+    act.className = 'btn lit';
+    act.onclick = () => answer(true);
+    act2.hidden = false;
+    act2.textContent = 'Отклонить';
+    act2.onclick = () => answer(false);
+  } else if (p.contact_status === 'accepted') {
     act.textContent = p.username ? 'Написать в Telegram' : 'Контакт открыт';
     act.className = 'btn lit';
     act.onclick = () => p.username
       ? tg.openTelegramLink('https://t.me/' + p.username)
       : toast('У человека нет ника — он напишет сам');
   } else if (p.contact_status === 'pending') {
-    act.textContent = 'Запрос отправлен';
+    act.textContent = 'Запрос отправлен — ждём ответа';
+    act.className = 'btn ghost'; act.onclick = null;
+  } else if (p.contact_status === 'declined') {
+    act.textContent = 'Запрос отклонён';
     act.className = 'btn ghost'; act.onclick = null;
   } else {
     act.textContent = 'Запросить контакт';
@@ -373,7 +411,8 @@ $('#a-export').onclick = async () => {
   b.disabled = false; b.textContent = 'Выгрузить базу в Excel';
 };
 
-$('#top-scan').onclick = () => scan();
+$('#scan-main').onclick = () => scan();
+$('#scan-me').onclick = () => scan();
 
 /* ── скан ── */
 function scan() {
@@ -419,9 +458,6 @@ async function loadAll() {
       : 'Чем больше людей в улье, тем выше у каждого шанс встретить своё шесть из шести.';
   } catch {
     $('#me-inv-txt').textContent = 'Ссылка сейчас недоступна, попробуйте позже.';
-  }
-  if (S.summary.pending_in) {
-    $('#nav [data-go="p-match"]').insertAdjacentHTML('beforeend', '<span class="dot"></span>');
   }
   return true;
 }
