@@ -35,6 +35,9 @@ async function loadConfig() {
 }
 
 const tg = window.Telegram?.WebApp;
+/* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
+   раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
+const MOBILE = ['android', 'android_x', 'ios'].includes(tg?.platform ?? '');
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -633,16 +636,16 @@ function fitNav() {
   );
   document.documentElement.style.setProperty('--tgtop', top + 'px');
 
-  const mobile = ['android', 'android_x', 'ios'].includes(tg?.platform ?? '');
   const safe = Math.max(
     tg?.safeAreaInset?.bottom ?? 0,
     tg?.contentSafeAreaInset?.bottom ?? 0,
-    mobile ? 22 : 0,          // плашка-ручка есть только в мобильных клиентах
+    MOBILE ? 22 : 0,          // плашка-ручка есть только в мобильных клиентах
   );
   document.documentElement.style.setProperty('--tgsafe', safe + 'px');
   const n = $('#nav');
   if (!n || n.hidden) return;
-  document.documentElement.style.setProperty('--navh', n.offsetHeight + 'px');
+  document.documentElement.style.setProperty('--navh',
+    Math.min(n.offsetHeight || 86, 160) + 'px');
 }
 addEventListener('resize', fitNav);
 tg?.onEvent?.('safeAreaChanged', fitNav);
@@ -687,9 +690,13 @@ async function loadAll() {
     await loadConfig();
 
     if (tg) {
-      tg.ready(); tg.expand();
-      tg.setHeaderColor?.('#070B0A'); tg.setBackgroundColor?.('#070B0A');
-      tg.disableVerticalSwipes?.();
+      tg.ready();
+      if (MOBILE) {
+        tg.expand();
+        tg.disableVerticalSwipes?.();
+      }
+      tg.setHeaderColor?.('#070B0A');
+      tg.setBackgroundColor?.('#070B0A');
     }
     $('#intro-ros').innerHTML = rosette([1, 1, 1, 1, 1, 1], 56, { jack: true });
 

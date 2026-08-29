@@ -23,6 +23,10 @@
 html,body{margin:0;background:var(--void);color:var(--chalk);font-family:var(--ui);
   overscroll-behavior-y:none;-webkit-font-smoothing:antialiased}
 body{max-width:560px;margin:0 auto}
+@media (min-width:760px){
+  body{max-width:520px}
+  .card-in{padding-top:32px}
+}
 button{font-family:inherit}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
@@ -378,7 +382,7 @@ nav[hidden],header[hidden]{display:none}
 
 <div class="toast" id="toast"></div>
 
-<script src="qr.js?v=7"></script>
-<script type="module" src="app.js?v=7"></script>
+<script src="qr.js?v=8"></script>
+<script type="module" src="app.js?v=8"></script>
 </body>
 </html>
