@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
 const CHAT = 'https://t.me/Members_6x6';           // общий чат участников
-const SUPPORT = 'Nickbv';        // без @, сюда пишут при поломках
+const SUPPORT = 'ВСТАВЬ_НИК_ДЛЯ_ПОДДЕРЖКИ';        // без @, сюда пишут при поломках
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -537,15 +537,29 @@ async function renderAdmin() {
   try {
     const a = await rpc('admin_stats');
     const rows = [
-      ['Игроков', a.total], ['За сутки', a.day], ['За неделю', a.week],
-      ['Заселено конфигураций', a.configs_used],
-      ['Запросов на контакт', a.requests], ['Принято', a.accepted], ['Отклонено', a.declined],
-      ['Пар 6 из 6', a.jackpots], ['Отмечены «рядом»', a.presence_now],
-      ['Бот доходит', a.bot_ok], ['Застряло в очереди', a.outbox_stuck],
+      ['Игроков', a.total],
+      ['За сутки', a.day],
+      ['За неделю', a.week],
+      ['Заселено конфигураций', `${a.configs_used} из 30 240`],
+      ['Пар 6 из 6 в базе', a.jackpots],
+      ['Из них уже списались', a.jackpots_met],
+      ['Запросов на контакт', a.requests],
+      ['Принято', a.accepted],
+      ['Отклонено', a.declined],
+      ['Сканов при встрече', a.scans],
+      ['Отмечены «рядом» сейчас', a.presence_now],
+      ['Бот доходит', `${a.bot_ok} из ${a.total}`],
+      ['Застряло в очереди', a.outbox_stuck],
     ];
+    const unreachable = a.total - a.bot_ok;
     $('#a-stats').innerHTML = rows.map(([k, v]) =>
       `<div class="row" style="cursor:default"><div class="grow">${k}</div>
-       <span class="cnt">${v}</span></div>`).join('');
+       <span class="cnt">${v}</span></div>`).join('')
+      + (unreachable > a.total / 2
+        ? `<div class="presnow" style="margin-top:16px">До <b>${unreachable}</b> человек
+           не доходят сообщения — они не запускали бота. О новых совпадениях и запросах
+           на контакт они узнают, только если зайдут в приложение сами.</div>`
+        : '');
   } catch (e) { $('#a-stats').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
