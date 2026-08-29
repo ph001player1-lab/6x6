@@ -1,12 +1,25 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-/* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
-const CHAT = 'https://t.me/Members_6x6';           // общий чат участников
-const SUPPORT = 'Nickbv';        // без @, сюда пишут при поломках
-/* ════════════════════════════════════════════════ */
+/* Настройки живут в config.js — этот файл править не нужно. */
+const CFG = window.SIX_CONFIG ?? {};
+const clean = (v) => String(v ?? '').trim();
+const SUPABASE_URL  = clean(CFG.SUPABASE_URL).replace(/\/+$/, '');
+const SUPABASE_ANON = clean(CFG.SUPABASE_ANON);
+const BOT           = clean(CFG.BOT).replace(/^@/, '');
+const CHAT          = clean(CFG.CHAT) || 'https://t.me/Members_6x6';
+const SUPPORT       = clean(CFG.SUPPORT).replace(/^@/, '');
+
+/* Значение заголовка обязано быть латиницей. Незаполненная настройка с моим
+   placeholder-ом кириллицей роняет fetch с невнятной ошибкой про ISO-8859-1,
+   поэтому проверяем заранее и говорим по-человечески. */
+function configProblems() {
+  const latin = (v) => /^[\x20-\x7E]*$/.test(v);
+  const bad = [];
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(SUPABASE_URL)) bad.push('SUPABASE_URL');
+  if (!SUPABASE_ANON || !latin(SUPABASE_ANON)) bad.push('SUPABASE_ANON');
+  if (!/^[A-Za-z0-9_]{3,64}$/.test(BOT)) bad.push('BOT');
+  return bad;
+}
 
 const tg = window.Telegram?.WebApp;
 const $ = (s) => document.querySelector(s);
@@ -657,6 +670,12 @@ async function loadAll() {
 
 (async function boot() {
   try {
+    const bad = configProblems();
+    if (bad.length) {
+      throw new Error('В файле config.js не заполнено: ' + bad.join(', ') +
+        '. Впишите значения из Supabase → Settings → API и от BotFather.');
+    }
+
     if (tg) {
       tg.ready(); tg.expand();
       tg.setHeaderColor?.('#070B0A'); tg.setBackgroundColor?.('#070B0A');
