@@ -697,6 +697,16 @@ async function loadAll() {
       }
       tg.setHeaderColor?.('#070B0A');
       tg.setBackgroundColor?.('#070B0A');
+
+      /* По кнопке из чата Telegram Desktop открывает приложение во весь экран,
+         и такое окно нельзя ни сдвинуть, ни свернуть. По прямой ссылке — обычным
+         окном. Выравниваем поведение: на компьютере полноэкранный режим не нужен. */
+      if (!MOBILE) {
+        const unfull = () => { try { if (tg.isFullscreen) tg.exitFullscreen?.(); } catch { /* старый клиент */ } };
+        unfull();
+        tg.onEvent?.('fullscreenChanged', unfull);
+        [100, 400].forEach((ms) => setTimeout(unfull, ms));
+      }
     }
     $('#intro-ros').innerHTML = rosette([1, 1, 1, 1, 1, 1], 56, { jack: true });
 
