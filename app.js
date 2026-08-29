@@ -34,6 +34,7 @@ async function loadConfig() {
   }
 }
 
+const APP_VERSION = 10;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -424,6 +425,16 @@ function renderMe() {
       <div class="grow">${label(i + 1, v)}<div class="sub">${SPHERES[i]}</div></div></div>`).join('');
   $('#me-n6').classList.toggle('on', S.summary.me.notify_6);
   $('#me-n5').classList.toggle('on', S.summary.me.notify_5);
+
+  // Служебная строка: по ней видно, не завис ли клиент на старой версии
+  $('#me-diag').textContent = [
+    'сборка ' + APP_VERSION,
+    (tg?.platform ?? 'вне telegram') + ' ' + (tg?.version ?? ''),
+    'окно ' + innerWidth + '\u00D7' + innerHeight,
+    'во весь экран: ' + (tg?.isFullscreen === undefined ? 'не поддерживается'
+                        : tg.isFullscreen ? 'да' : 'нет'),
+    'выход из него: ' + (tg?.exitFullscreen ? 'есть' : 'нет'),
+  ].join(' \u00B7 ');
 }
 
 $('#me-edit').onclick = () => {
@@ -705,7 +716,7 @@ async function loadAll() {
         const unfull = () => { try { if (tg.isFullscreen) tg.exitFullscreen?.(); } catch { /* старый клиент */ } };
         unfull();
         tg.onEvent?.('fullscreenChanged', unfull);
-        [100, 400].forEach((ms) => setTimeout(unfull, ms));
+        [100, 400, 1000, 2000].forEach((ms) => setTimeout(unfull, ms));
       }
     }
     $('#intro-ros').innerHTML = rosette([1, 1, 1, 1, 1, 1], 56, { jack: true });
