@@ -100,7 +100,9 @@ header h1{font-family:var(--display);font-size:15px;font-weight:700;margin:0;let
 .card .score{font-family:var(--display);font-size:40px;text-align:center;line-height:1}
 .card .score.jack{color:var(--honey)}
 .card .name{text-align:center;font-size:20px;font-weight:700;margin-top:16px}
-.card .nick{text-align:center;font-family:var(--mono);font-size:13px;color:var(--honey);margin-top:5px}
+.card .nick{text-align:center;font-family:var(--mono);font-size:13px;color:var(--honey);
+  margin-top:5px;cursor:pointer;padding:6px}
+.card .nick:active{opacity:.6}
 .axlist{margin:28px 0;border-top:1px solid var(--line)}
 .ax{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--line);font-size:14px}
 .ax .ic{width:22px;text-align:center;font-size:15px;flex:none}
@@ -196,9 +198,14 @@ nav button.on{color:var(--honey)}
 nav[hidden],header[hidden]{display:none}
 
 .empty{text-align:center;color:var(--moss);font-size:14px;line-height:1.65;padding:46px 14px}
-.toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%) translateY(90px);z-index:60;
+/* Подсказка сверху и сквозная для касаний: внизу тесно от вкладок,
+   плашки Telegram и кнопок действия, и она перекрывала их на невысоких экранах. */
+.toast{position:fixed;left:50%;top:calc(var(--tgtop, 0px) + 10px);z-index:60;
+  transform:translateX(-50%) translateY(-160px);pointer-events:none;
   background:var(--wax);border:1px solid var(--line);padding:12px 20px;border-radius:12px;
-  font-size:14px;max-width:88vw;text-align:center;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+  font-size:14px;max-width:88vw;text-align:center;line-height:1.4;
+  box-shadow:0 8px 28px rgba(0,0,0,.45);
+  transition:transform .3s cubic-bezier(.2,.8,.2,1)}
 .toast.on{transform:translateX(-50%) translateY(0)}
 .presnow{background:rgba(232,163,61,.09);border:1px solid rgba(232,163,61,.4);border-radius:13px;
   padding:13px 15px;font-size:14px;line-height:1.5;margin-top:10px}

@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
 const CHAT = 'https://t.me/Members_6x6';           // общий чат участников
-const SUPPORT = 'Nickbv';        // без @, сюда пишут при поломках
+const SUPPORT = 'ВСТАВЬ_НИК_ДЛЯ_ПОДДЕРЖКИ';        // без @, сюда пишут при поломках
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -184,7 +184,7 @@ function renderMatches() {
     nb.querySelector('.row').onclick = () => {
       haptic();
       const url = `https://t.me/${BOT}?start=notify`;
-      tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank');
+      try { tg?.openTelegramLink?.(url); } catch { window.open(url, '_blank'); }
     };
   }
 
@@ -283,6 +283,30 @@ async function openList(kind, value, title) {
 }
 $('#l-back').onclick = popOverlay;
 
+/* На iOS openTelegramLink иногда молча ничего не делает. Пробуем по очереди:
+   штатный вызов, затем схему tg://, затем просто копируем ник. */
+function openTelegram(nick) {
+  const web = `https://t.me/${nick}`;
+  let left = false;
+  const mark = () => { left = true; };
+  document.addEventListener('visibilitychange', mark, { once: true });
+  addEventListener('pagehide', mark, { once: true });
+  const gone = () => left || document.hidden;
+
+  try { tg?.openTelegramLink?.(web); } catch { /* запасные пути ниже */ }
+
+  setTimeout(() => {
+    if (gone()) return;
+    try { location.href = `tg://resolve?domain=${nick}`; } catch { /* см. ниже */ }
+    setTimeout(async () => {
+      if (gone()) return;
+      const ok = await copyText('@' + nick);
+      toast(ok ? `Чат не открылся. Ник @${nick} скопирован — вставьте в поиск Telegram`
+               : `Чат не открылся. Ник: @${nick}`, 5200);
+    }, 800);
+  }, 700);
+}
+
 /* ── карточка человека ── */
 function openPerson(p) {
   const jack = p.score === 6;
@@ -290,7 +314,14 @@ function openPerson(p) {
   $('#pr-score').textContent = `${p.score} из 6`;
   $('#pr-score').className = 'score' + (jack ? ' jack' : '');
   $('#pr-name').textContent = p.first_name;
-  $('#pr-nick').textContent = p.username ? '@' + p.username : '';
+  const nickEl = $('#pr-nick');
+  nickEl.textContent = p.username ? '@' + p.username : '';
+  nickEl.onclick = p.username
+    ? async () => {
+        const ok = await copyText('@' + p.username);
+        if (ok) { haptic(); toast('Ник скопирован'); }
+      }
+    : null;
   $('#pr-axes').innerHTML = p.hits.map((h, i) => `
     <div class="ax${h ? ' hit' : ''}"><span class="ic">${ICONS[i]}</span>
       <span class="tx">${h ? GAINS[i] : SPHERES[i] + ' — разошлись'}</span>
@@ -321,8 +352,8 @@ function openPerson(p) {
     act.textContent = p.username ? 'Написать в Telegram' : 'Контакт открыт';
     act.className = 'btn lit';
     act.onclick = () => p.username
-      ? tg.openTelegramLink('https://t.me/' + p.username)
-      : toast('У человека нет ника — он напишет сам');
+      ? openTelegram(p.username)
+      : toast('У человека нет ника в Telegram — он напишет вам сам', 4000);
   } else if (p.contact_status === 'pending') {
     act.textContent = 'Запрос отправлен — ждём ответа';
     act.className = 'btn ghost'; act.onclick = null;
@@ -469,14 +500,13 @@ $('#me-share').onclick = () => {
 
 $('#me-chat').onclick = () => {
   haptic();
-  tg?.openTelegramLink ? tg.openTelegramLink(CHAT) : window.open(CHAT, '_blank');
+  openTelegram(CHAT.replace(/^https:\/\/t\.me\//, ''));
 };
 
 $('#me-help').onclick = () => {
   haptic();
   if (/ВСТАВЬ/.test(SUPPORT)) return toast('Поддержка пока не настроена');
-  const url = `https://t.me/${SUPPORT}`;
-  tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank');
+  openTelegram(SUPPORT);
 };
 
 /* ── вкладка «Улей» ── */
