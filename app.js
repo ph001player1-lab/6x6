@@ -1,0 +1,456 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+/* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
+/* ════════════════════════════════════════════════ */
+
+const tg = window.Telegram?.WebApp;
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+
+const ICONS = ['🌴', '❤️', '🏠', '⚖️', '💰', '🧭'];
+const SPHERES = ['Климат', 'Отношения', 'Быт', 'Общество', 'Деньги', 'Мировоззрение'];
+const QUESTIONS = [
+  'Где вы хотите жить?',
+  'Какая модель отношений вам ближе?',
+  'Какой уклад жизни вам подходит?',
+  'Какие общественные порядки вам по душе?',
+  'Как вы хотите зарабатывать?',
+  'Во что вы верите?',
+];
+const GAINS = [
+  'Хотите жить в одном климате',
+  'Одинаково понимаете, что такое «вместе»',
+  'Совпал уклад — быт не станет полем боя',
+  'Общие взгляды — легко дружить и спорить',
+  'Можете делать общее дело',
+  'Общая картина мира',
+];
+
+let sb = null;
+const S = { me: null, opts: null, summary: null, answers: [], admin: false, invite: null };
+let qi = 0, draft = [], editing = false;
+
+/* ── мелочи ── */
+const toast = (t, ms = 2600) => {
+  const el = $('#toast'); el.textContent = t; el.classList.add('on');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), ms);
+};
+const haptic = (k) => { try { k === 'ok'
+  ? tg.HapticFeedback.notificationOccurred('success')
+  : tg.HapticFeedback.impactOccurred('light'); } catch { /* не критично */ } };
+
+function pane(id) {
+  $$('.pane').forEach((p) => p.classList.remove('on'));
+  $(id).classList.add('on');
+  window.scrollTo(0, 0);
+}
+
+/** Розетка: шестиугольник из шести сегментов, по одному на сферу. */
+function rosette(hits, size = 64, opts = {}) {
+  const c = size / 2, r = size / 2 - 1, gap = 0.06;
+  let out = `<svg viewBox="0 0 ${size} ${size}" width="100%" height="100%" class="ros${
+    opts.jack ? ' jack' : ''}${opts.seq ? ' seq' : ''}">`;
+  for (let k = 0; k < 6; k++) {
+    const p = [[c, c]];
+    for (const t of [k, k + 1]) {
+      const a = (-90 + 60 * t) * Math.PI / 180;
+      p.push([c + r * Math.cos(a), c + r * Math.sin(a)]);
+    }
+    const gx = (p[0][0] + p[1][0] + p[2][0]) / 3, gy = (p[0][1] + p[1][1] + p[2][1]) / 3;
+    const pts = p.map(([x, y]) => `${gx + (x - gx) * (1 - gap)},${gy + (y - gy) * (1 - gap)}`);
+    out += `<polygon points="${pts.join(' ')}" class="${hits[k] ? 'on' : ''}" style="--i:${k}"/>`;
+  }
+  return out + '</svg>';
+}
+
+const label = (axis, val) =>
+  S.opts.find((o) => o.axis === axis && o.val === val)?.label ?? '—';
+
+/* ── обращения к базе ── */
+async function rpc(fn, args) {
+  const { data, error } = await sb.rpc(fn, args ?? {});
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/* ── опрос ── */
+function renderQuestion() {
+  const ax = qi + 1;
+  const opts = S.opts.filter((o) => o.axis === ax).sort((a, b) => a.val - b.val);
+  $('#q-step').textContent = `Вопрос ${ax} из 6`;
+  $('#q-fill').style.width = `${ax / 6 * 100}%`;
+  $('#q-title').textContent = QUESTIONS[qi];
+  $('#q-opts').innerHTML = opts.map((o) => `
+    <button class="opt${draft[qi] === o.val ? ' pick' : ''}" data-v="${o.val}">
+      <div class="t">${o.label}</div>${o.hint ? `<div class="d">${o.hint}</div>` : ''}
+    </button>`).join('');
+  $$('#q-opts .opt').forEach((el) => el.onclick = () => {
+    draft[qi] = +el.dataset.v; haptic(); renderQuestion();
+  });
+  $('#q-next').disabled = !draft[qi];
+  $('#q-next').textContent = qi === 5 ? (editing ? 'Сохранить' : 'Готово') : 'Дальше';
+  $('#q-back').hidden = qi === 0;
+  window.scrollTo(0, 0);
+}
+
+$('#q-next').onclick = async () => {
+  if (qi < 5) { qi++; renderQuestion(); return; }
+  const btn = $('#q-next');
+  btn.disabled = true; btn.textContent = 'Сохраняем…';
+  try {
+    await rpc('save_answers', {
+      a: draft, p_username: S.me.username, p_first_name: S.me.first_name,
+      p_photo: S.me.photo_url, p_invite: S.invite,
+    });
+    haptic('ok'); editing = false;
+    await loadAll(); go('p-match');
+    toast('Готово. Смотрите, с кем совпали');
+  } catch (e) { toast('Не сохранилось: ' + e.message); btn.disabled = false; renderQuestion(); }
+};
+$('#q-back').onclick = () => { qi--; renderQuestion(); };
+$('#i-next').onclick = () => pane('#p-brief');
+$('#b-start').onclick = () => { qi = 0; renderQuestion(); pane('#p-quiz'); };
+
+/* ── вкладка «Совпадения» ── */
+function renderMatches() {
+  const d = S.summary, b = d.buckets ?? {}, best = d.best ?? 0;
+  const hits = Array(6).fill(0).map((_, i) => (i < best ? 1 : 0));
+
+  $('#m-hero').className = 'hero' + (best === 6 ? ' jack' : '');
+  $('#m-hero').innerHTML =
+    `<div style="width:76px;flex:none">${rosette(hits, 76, { jack: best === 6 })}</div>
+     <div><div class="num">${best}</div><div class="of">ЛУЧШЕЕ СОВПАДЕНИЕ</div></div>`;
+
+  $('#m-scores').innerHTML = [6, 5, 4, 3].map((n) => {
+    const c = b[n] ?? 0;
+    return `<button class="row${c ? '' : ' mute'}${n === 6 ? ' gold' : ''}" data-score="${n}">
+      <div style="width:26px;flex:none">${rosette(
+        Array(6).fill(0).map((_, i) => (i < n ? 1 : 0)), 26, { jack: n === 6 })}</div>
+      <div class="grow">${n} из 6</div>
+      <span class="cnt">${c}</span><span class="chev">›</span></button>`;
+  }).join('');
+
+  $('#m-axes').innerHTML = (d.axes ?? []).map((a) => `
+    <button class="row${a.cnt ? '' : ' mute'}" data-axis="${a.axis}">
+      <span style="font-size:17px;width:24px;flex:none">${ICONS[a.axis - 1]}</span>
+      <div class="grow">${label(a.axis, a.val)}<div class="sub">${SPHERES[a.axis - 1]}</div></div>
+      <span class="cnt">${a.cnt}</span><span class="chev">›</span></button>`).join('');
+
+  $$('#m-scores .row').forEach((el) =>
+    el.onclick = () => openList('score', +el.dataset.score, `${el.dataset.score} из 6`));
+  $$('#m-axes .row').forEach((el) => {
+    const ax = +el.dataset.axis;
+    el.onclick = () => openList('axis', ax, label(ax, S.answers[ax - 1]));
+  });
+
+  loadNearby();
+}
+
+async function loadNearby() {
+  try {
+    const near = await rpc('match_list', { filter_kind: 'near', lim: 50, radius_km: 5 });
+    const wrap = $('#m-near-wrap');
+    if (!near.length) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    const places = {};
+    near.forEach((p) => { if (p.place) places[p.place] = (places[p.place] ?? 0) + 1; });
+    $('#m-near').innerHTML =
+      `<button class="row" data-near="1"><span style="font-size:17px;width:24px;flex:none">📍</span>
+        <div class="grow">В пределах 5 км<div class="sub">по вашей отметке</div></div>
+        <span class="cnt">${near.length}</span><span class="chev">›</span></button>` +
+      Object.entries(places).map(([pl, n]) => `
+        <button class="row" data-place="${pl}"><span style="font-size:17px;width:24px;flex:none">🏷</span>
+        <div class="grow">${pl}</div><span class="cnt">${n}</span><span class="chev">›</span></button>`).join('');
+    $$('#m-near .row').forEach((el) => el.onclick = () =>
+      el.dataset.near ? openList('near', null, 'Рядом, до 5 км')
+                      : openList('place', null, el.dataset.place));
+  } catch { $('#m-near-wrap').hidden = true; }
+}
+
+/* ── список людей ── */
+async function openList(kind, value, title) {
+  $('#l-kind').textContent = kind === 'axis' ? 'Совпали по сфере'
+    : kind === 'score' ? 'Совпадение' : 'Рядом сейчас';
+  $('#l-title').textContent = title;
+  $('#l-body').innerHTML = '<div class="empty">Ищем…</div>';
+  $('#c-list').classList.add('on');
+  try {
+    const rows = await rpc('match_list',
+      { filter_kind: kind, filter_value: value, lim: 60, radius_km: 5 });
+    $('#l-body').innerHTML = rows.length ? rows.map((p, i) => `
+      <button class="row" data-i="${i}">
+        <div class="ava">${p.photo_url
+          ? `<img src="${p.photo_url}" alt="">` : (p.first_name[0] ?? '?').toUpperCase()}</div>
+        <div class="grow"><div>${p.first_name}</div>
+          <div class="sub">${p.score} из 6${p.proximity ? ' · ' + p.proximity : ''}${
+            p.contact_status === 'accepted' ? ' · контакт открыт'
+            : p.contact_status === 'pending' ? ' · запрос отправлен' : ''}</div></div>
+        <div style="width:26px;flex:none">${rosette(p.hits, 26, { jack: p.score === 6 })}</div>
+        <span class="chev">›</span></button>`).join('')
+      : '<div class="empty">Здесь пока никого.<br>Позовите друзей — улей растёт от каждого.</div>';
+    $$('#l-body .row').forEach((el) => el.onclick = () => openPerson(rows[+el.dataset.i]));
+  } catch (e) { $('#l-body').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+$('#l-back').onclick = () => $('#c-list').classList.remove('on');
+
+/* ── карточка человека ── */
+function openPerson(p) {
+  const jack = p.score === 6;
+  $('#pr-ros').innerHTML = rosette(p.hits, 132, { jack, seq: true });
+  $('#pr-score').textContent = `${p.score} из 6`;
+  $('#pr-score').className = 'score' + (jack ? ' jack' : '');
+  $('#pr-name').textContent = p.first_name;
+  $('#pr-nick').textContent = p.username ? '@' + p.username : '';
+  $('#pr-axes').innerHTML = p.hits.map((h, i) => `
+    <div class="ax${h ? ' hit' : ''}"><span class="ic">${ICONS[i]}</span>
+      <span class="tx">${h ? GAINS[i] : SPHERES[i] + ' — разошлись'}</span>
+      <span class="mk">${h ? '✓' : '—'}</span></div>`).join('');
+
+  const act = $('#pr-act');
+  if (p.contact_status === 'accepted') {
+    act.textContent = p.username ? 'Написать в Telegram' : 'Контакт открыт';
+    act.className = 'btn lit';
+    act.onclick = () => p.username
+      ? tg.openTelegramLink('https://t.me/' + p.username)
+      : toast('У человека нет ника — он напишет сам');
+  } else if (p.contact_status === 'pending') {
+    act.textContent = 'Запрос отправлен';
+    act.className = 'btn ghost'; act.onclick = null;
+  } else {
+    act.textContent = 'Запросить контакт';
+    act.className = 'btn';
+    act.onclick = async () => {
+      act.disabled = true;
+      try {
+        const r = await rpc('request_contact', { target: p.tg_id });
+        haptic('ok');
+        p.contact_status = r.status;
+        toast(r.status === 'accepted'
+          ? 'Контакт открыт — вы запросили друг друга'
+          : 'Запрос ушёл. Придёт ответ — сообщим');
+        openPerson(p);
+      } catch (e) { toast(e.message); act.disabled = false; }
+    };
+  }
+  $('#c-person').classList.add('on');
+  haptic();
+}
+$('#pr-close').onclick = () => $('#c-person').classList.remove('on');
+
+/* ── вкладка «Я» ── */
+function renderMe() {
+  const a = S.answers;
+  $('#me-qr').innerHTML = QR.svg(`6x6|${S.me.tg_id}|${a.join('')}`,
+    { dark: '#070B0A', light: '#E7EFE9', quiet: 2 });
+  $('#me-code').textContent = S.summary.me.code;
+  $('#me-answers').innerHTML = a.map((v, i) => `
+    <div class="row" style="cursor:default"><span style="font-size:17px;width:24px;flex:none">${ICONS[i]}</span>
+      <div class="grow">${label(i + 1, v)}<div class="sub">${SPHERES[i]}</div></div></div>`).join('');
+  $('#me-n6').classList.toggle('on', S.summary.me.notify_6);
+  $('#me-n5').classList.toggle('on', S.summary.me.notify_5);
+}
+
+$('#me-edit').onclick = () => {
+  editing = true; qi = 0; draft = S.answers.slice();
+  renderQuestion(); pane('#p-quiz');
+  toast('Отвечайте как хотите, а не как сложилось', 3600);
+};
+
+$('#me-geo').onclick = async () => {
+  const t = $('#me-geo');
+  if (t.classList.contains('on')) {
+    await rpc('clear_presence'); t.classList.remove('on'); toast('Отметка снята'); return;
+  }
+  const put = async (lat, lon) => {
+    await rpc('set_presence', { p_lat: lat, p_lon: lon,
+      p_place: $('#me-place').value.trim() || null, hours: 6 });
+    t.classList.add('on'); toast('Отметка на 6 часов'); loadNearby();
+  };
+  try {
+    const lm = tg?.LocationManager;
+    if (lm?.init) {
+      lm.init(() => lm.getLocation((loc) => loc
+        ? put(loc.latitude, loc.longitude)
+        : toast('Telegram не дал координаты — впишите место вручную')));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => put(pos.coords.latitude, pos.coords.longitude),
+      () => toast('Доступ к геолокации закрыт — впишите место вручную'));
+  } catch { toast('Геолокация недоступна — впишите место вручную'); }
+};
+
+$('#me-place-go').onclick = async () => {
+  const place = $('#me-place').value.trim();
+  if (!place) return toast('Впишите название места');
+  await rpc('set_presence', { p_place: place, hours: 6 });
+  toast('Отметились на 6 часов'); loadNearby();
+};
+
+const notifyToggle = async () => {
+  await rpc('set_notify', {
+    n6: $('#me-n6').classList.contains('on'),
+    n5: $('#me-n5').classList.contains('on'),
+  });
+};
+$('#me-n6').onclick = (e) => { e.target.classList.toggle('on'); notifyToggle(); };
+$('#me-n5').onclick = (e) => { e.target.classList.toggle('on'); notifyToggle(); };
+
+$('#me-invite').onclick = async () => {
+  const link = `https://t.me/${BOT}/app?startapp=${S.inviteCode}`;
+  try { await navigator.clipboard.writeText(link); toast('Ссылка скопирована'); }
+  catch { tg?.openTelegramLink?.(`https://t.me/share/url?url=${encodeURIComponent(link)}`); }
+};
+
+/* ── вкладка «Улей» ── */
+async function renderHive() {
+  const h = await rpc('hive_stats');
+  $('#h-top').innerHTML = `
+    <div><div class="num">${h.total}</div><div class="lbl" style="margin-top:5px">в улье</div></div>
+    <div><div class="num" style="color:var(--lit)">+${h.week}</div><div class="lbl" style="margin-top:5px">за неделю</div></div>
+    <div><div class="num" style="color:var(--honey)">${h.configs_used}</div>
+         <div class="lbl" style="margin-top:5px">из ${h.configs_all.toLocaleString('ru')} конфигураций</div></div>`;
+
+  const byAxis = {};
+  h.axes.forEach((a) => (byAxis[a.axis] ??= []).push(a));
+  $('#h-axes').innerHTML = Object.entries(byAxis).map(([ax, list]) => {
+    const max = Math.max(...list.map((x) => x.cnt), 1);
+    return `<div class="sect"><span class="lbl">${ICONS[ax - 1]} ${SPHERES[ax - 1]}</span>` +
+      list.sort((a, b) => b.cnt - a.cnt).map((o) => `
+        <div class="meter${o.mine ? ' mine' : ''}">
+          <div class="top"><span>${o.label}${o.mine ? ' — вы здесь' : ''}</span>
+            <b>${h.total ? Math.round(o.cnt / h.total * 100) : 0}%</b></div>
+          <div class="tr"><i class="fl" style="width:${o.cnt / max * 100}%"></i></div>
+        </div>`).join('') + '</div>';
+  }).join('');
+}
+
+/* ── админ ── */
+async function renderAdmin() {
+  try {
+    const a = await rpc('admin_stats');
+    const rows = [
+      ['Игроков', a.total], ['За сутки', a.day], ['За неделю', a.week],
+      ['Заселено конфигураций', a.configs_used],
+      ['Запросов на контакт', a.requests], ['Принято', a.accepted], ['Отклонено', a.declined],
+      ['Пар 6 из 6', a.jackpots], ['Отмечены «рядом»', a.presence_now],
+      ['Бот доходит', a.bot_ok], ['Застряло в очереди', a.outbox_stuck],
+    ];
+    $('#a-stats').innerHTML = rows.map(([k, v]) =>
+      `<div class="row" style="cursor:default"><div class="grow">${k}</div>
+       <span class="cnt">${v}</span></div>`).join('');
+  } catch (e) { $('#a-stats').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+$('#a-export').onclick = async () => {
+  const b = $('#a-export'); b.disabled = true; b.textContent = 'Собираем…';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${SUPABASE_ANON}`,
+      },
+      body: JSON.stringify({ tg_id: S.me.tg_id }),
+    }).then((x) => x.json());
+    toast(r.ok ? `Файл на ${r.rows} строк ушёл вам в чат с ботом` : 'Не получилось: ' + r.error);
+  } catch (e) { toast('Не получилось: ' + e.message); }
+  b.disabled = false; b.textContent = 'Выгрузить базу в Excel';
+};
+
+$('#top-scan').onclick = () => scan();
+
+/* ── скан ── */
+function scan() {
+  if (!tg?.showScanQrPopup) return toast('Сканер работает только внутри Telegram');
+  tg.showScanQrPopup({ text: 'Наведите на код другого игрока' }, (txt) => {
+    const m = String(txt ?? '').match(/^6x6\|(\d+)\|([1-7]{6})$/);
+    if (!m) { toast('Это не код игрока 6×6'); return false; }
+    if (m[1] === String(S.me.tg_id)) { toast('Это ваш собственный код'); return false; }
+    tg.closeScanQrPopup();
+    rpc('scan_contact', { target: Number(m[1]) })
+      .then((r) => { haptic('ok'); openPerson({ ...r, tg_id: Number(m[1]), contact_status: 'accepted' }); loadAll(); })
+      .catch((e) => toast(e.message));
+    return true;
+  });
+}
+
+/* ── навигация ── */
+function go(id) {
+  pane('#' + id);
+  $$('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.go === id));
+  if (id === 'p-hive') renderHive();
+  if (id === 'p-admin') renderAdmin();
+  if (id === 'p-me') renderMe();
+}
+$$('#nav button').forEach((b) => b.onclick = () => { haptic(); go(b.dataset.go); });
+
+/* ── загрузка ── */
+async function loadAll() {
+  S.summary = await rpc('my_summary');
+  if (!S.summary.registered) return false;
+  S.answers = S.summary.me.answers;
+  S.admin = !!S.summary.me.admin;
+  $('#nav [data-go="p-admin"]').hidden = !S.admin;
+  $('#nav').className = S.admin ? 'n4' : 'n3';
+  renderMatches();
+  const inv = await rpc('my_invite');
+  S.inviteCode = inv.code;
+  $('#me-inv-txt').textContent = inv.invited
+    ? `По вашей ссылке пришло ${inv.invited}. Чем больше в улье, тем выше шанс на шесть из шести.`
+    : 'Чем больше людей в улье, тем выше у каждого шанс встретить своё шесть из шести.';
+  if (S.summary.pending_in) {
+    $('#nav [data-go="p-match"]').insertAdjacentHTML('beforeend', '<span class="dot"></span>');
+  }
+  return true;
+}
+
+(async function boot() {
+  try {
+    if (tg) {
+      tg.ready(); tg.expand();
+      tg.setHeaderColor?.('#070B0A'); tg.setBackgroundColor?.('#070B0A');
+      tg.disableVerticalSwipes?.();
+    }
+    $('#intro-ros').innerHTML = rosette([1, 1, 1, 1, 1, 1], 56, { jack: true });
+
+    // Ключ anon сам по себе валидный JWT, поэтому функция работает
+    // и со включённой проверкой токена — переключатель в панели не нужен.
+    const auth = await fetch(`${SUPABASE_URL}/functions/v1/auth`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${SUPABASE_ANON}`,
+      },
+      body: JSON.stringify({ initData: tg?.initData ?? '' }),
+    }).then((r) => r.json());
+    if (auth.error) throw new Error(auth.error);
+
+    S.me = auth.user;
+    S.invite = auth.start_param ?? null;
+    sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
+      global: { headers: { Authorization: `Bearer ${auth.token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    S.opts = await sb.from('axis_options').select('*').then((r) => r.data ?? []);
+    if (!S.opts.length) throw new Error('Справочник вопросов пуст — выполните schema.sql');
+
+    const ready = await loadAll();
+    if (ready) {
+      $('#nav').hidden = false; $('#top').hidden = false;
+      go('p-match');
+    } else {
+      pane('#p-intro');            // шапку и вкладки покажем после шести ответов
+    }
+
+  } catch (e) {
+    $('#p-load').innerHTML =
+      `<div class="empty" style="padding-top:30vh">Не получилось открыть.<br><br>${e.message}</div>`;
+  }
+})();
