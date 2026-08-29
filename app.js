@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
 const CHAT = 'https://t.me/Members_6x6';           // общий чат участников
-const SUPPORT = 'Nickbv';        // без @, сюда пишут при поломках
+const SUPPORT = 'ВСТАВЬ_НИК_ДЛЯ_ПОДДЕРЖКИ';        // без @, сюда пишут при поломках
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -190,24 +190,53 @@ function renderMatches() {
 }
 
 async function loadNearby() {
+  const wrap = $('#m-near-wrap');
   try {
-    const near = await rpc('match_list', { filter_kind: 'near', lim: 50, radius_km: 5 });
-    const wrap = $('#m-near-wrap');
-    if (!near.length) { wrap.hidden = true; return; }
-    wrap.hidden = false;
-    const places = {};
-    near.forEach((p) => { if (p.place) places[p.place] = (places[p.place] ?? 0) + 1; });
-    $('#m-near').innerHTML =
-      `<button class="row" data-near="1"><span style="font-size:17px;width:24px;flex:none">📍</span>
-        <div class="grow">В пределах 5 км<div class="sub">по вашей отметке</div></div>
-        <span class="cnt">${near.length}</span><span class="chev">›</span></button>` +
-      Object.entries(places).map(([pl, n]) => `
-        <button class="row" data-place="${pl}"><span style="font-size:17px;width:24px;flex:none">🏷</span>
-        <div class="grow">${pl}</div><span class="cnt">${n}</span><span class="chev">›</span></button>`).join('');
+    const pres = await rpc('my_presence');
+    S.presence = pres;
+    renderPresence(pres);
+
+    if (!pres.active) { wrap.hidden = true; return; }
+
+    // Геопоиск и совпадение по месту — разные вещи: место работает и без координат.
+    const rows = [];
+    if (pres.has_geo && pres.near) {
+      rows.push(`<button class="row" data-kind="near">
+        <span style="font-size:17px;width:24px;flex:none">📍</span>
+        <div class="grow">В пределах 5 км<div class="sub">по вашей геолокации</div></div>
+        <span class="cnt">${pres.near}</span><span class="chev">›</span></button>`);
+    }
+    if (pres.place && pres.same_place) {
+      rows.push(`<button class="row" data-kind="place">
+        <span style="font-size:17px;width:24px;flex:none">🏷</span>
+        <div class="grow">${pres.place}<div class="sub">отметились там же</div></div>
+        <span class="cnt">${pres.same_place}</span><span class="chev">›</span></button>`);
+    }
+    wrap.hidden = !rows.length;
+    if (!rows.length) return;
+    $('#m-near').innerHTML = rows.join('');
     $$('#m-near .row').forEach((el) => el.onclick = () =>
-      el.dataset.near ? openList('near', null, 'Рядом, до 5 км')
-                      : openList('place', null, el.dataset.place));
-  } catch { $('#m-near-wrap').hidden = true; }
+      el.dataset.kind === 'near'
+        ? openList('near', null, 'Рядом, до 5 км')
+        : openList('place', null, pres.place));
+  } catch { wrap.hidden = true; }
+}
+
+function renderPresence(p) {
+  const box = $('#me-pres-now'), off = $('#me-pres-off');
+  $('#me-geo').classList.toggle('on', !!p.has_geo);
+  box.hidden = !p.active;
+  off.hidden = !p.active;
+  if (!p.active) { $('#me-place').value = ''; return; }
+  $('#me-place').value = p.place ?? '';
+  const h = Math.floor((p.minutes_left ?? 0) / 60), mm = (p.minutes_left ?? 0) % 60;
+  const left = h ? `${h} ч ${mm} мин` : `${mm} мин`;
+  const who = [];
+  if (p.place) who.push(`${p.same_place} там же`);
+  if (p.has_geo) who.push(`${p.near} в 5 км`);
+  box.innerHTML = `Вы отмечены${p.place ? ' в <b>' + p.place + '</b>' : ''}` +
+    `${p.has_geo ? ', геолокация включена' : ''}.<br>` +
+    `${who.length ? who.join(', ') + '. ' : ''}Отметка погаснет через ${left}.`;
 }
 
 /* ── список людей ── */
@@ -329,32 +358,58 @@ $('#me-edit').onclick = () => {
 $('#me-geo').onclick = async () => {
   const t = $('#me-geo');
   if (t.classList.contains('on')) {
-    await rpc('clear_presence'); t.classList.remove('on'); toast('Отметка снята'); return;
+    await rpc('set_presence', { p_lat: null, p_lon: null, hours: 6 });
+    toast('Геолокация останется до конца отметки. Чтобы убрать всё — «Снять отметку»', 4200);
+    return;
   }
   const put = async (lat, lon) => {
-    await rpc('set_presence', { p_lat: lat, p_lon: lon,
-      p_place: $('#me-place').value.trim() || null, hours: 6 });
-    t.classList.add('on'); toast('Отметка на 6 часов'); loadNearby();
+    renderPresence(await rpc('set_presence', { p_lat: lat, p_lon: lon, hours: 6 }));
+    toast('Геолокация добавлена'); loadNearby();
   };
-  try {
-    const lm = tg?.LocationManager;
-    if (lm?.init) {
-      lm.init(() => lm.getLocation((loc) => loc
-        ? put(loc.latitude, loc.longitude)
-        : toast('Telegram не дал координаты — впишите место вручную')));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => put(pos.coords.latitude, pos.coords.longitude),
-      () => toast('Доступ к геолокации закрыт — впишите место вручную'));
-  } catch { toast('Геолокация недоступна — впишите место вручную'); }
+  const lm = tg?.LocationManager;
+  if (lm?.init) {
+    lm.init(() => {
+      if (lm.isLocationAvailable === false) {
+        return toast('Телефон не даёт Telegram координаты. Впишите место текстом — это работает всегда', 4600);
+      }
+      lm.getLocation((loc) => {
+        if (loc) return put(loc.latitude, loc.longitude);
+        if (lm.isAccessRequested && !lm.isAccessGranted && lm.openSettings) {
+          toast('Доступ закрыт. Откройте настройки и разрешите геолокацию', 4200);
+          lm.openSettings();
+        } else {
+          toast('Координаты не пришли. Впишите место текстом — это работает всегда', 4600);
+        }
+      });
+    });
+    return;
+  }
+  if (!navigator.geolocation) {
+    return toast('Ваш Telegram не умеет геолокацию. Впишите место текстом', 4600);
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => put(pos.coords.latitude, pos.coords.longitude),
+    () => toast('Доступ к геолокации закрыт. Впишите место текстом — это работает всегда', 4600),
+    { timeout: 10000 });
+};
+
+$('#me-pres-off').onclick = async () => {
+  await rpc('clear_presence');
+  renderPresence({ active: false });
+  toast('Отметка снята'); loadNearby();
 };
 
 $('#me-place-go').onclick = async () => {
   const place = $('#me-place').value.trim();
   if (!place) return toast('Впишите название места');
-  await rpc('set_presence', { p_place: place, hours: 6 });
-  toast('Отметились на 6 часов'); loadNearby();
+  const b = $('#me-place-go'); b.disabled = true;
+  try {
+    renderPresence(await rpc('set_presence', { p_place: place, hours: 6 }));
+    haptic('ok');
+    toast('Отметились на 6 часов. Вас увидят те, кто вписал так же', 4000);
+    loadNearby();
+  } catch (e) { toast(e.message); }
+  b.disabled = false;
 };
 
 const notifyToggle = async () => {

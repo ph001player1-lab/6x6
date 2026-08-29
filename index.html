@@ -199,6 +199,9 @@ nav[hidden],header[hidden]{display:none}
   background:var(--wax);border:1px solid var(--line);padding:12px 20px;border-radius:12px;
   font-size:14px;max-width:88vw;text-align:center;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
 .toast.on{transform:translateX(-50%) translateY(0)}
+.presnow{background:rgba(232,163,61,.09);border:1px solid rgba(232,163,61,.4);border-radius:13px;
+  padding:13px 15px;font-size:14px;line-height:1.5;margin-top:10px}
+.presnow b{color:var(--honey)}
 .linkbox{font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--honey);
   background:var(--comb);border:1px solid var(--line);border-radius:12px;padding:13px;
   word-break:break-all;user-select:all;-webkit-user-select:all;margin-bottom:10px}
@@ -288,10 +291,15 @@ nav[hidden],header[hidden]{display:none}
 
   <div class="sect">
     <span class="lbl">Я сейчас здесь</span>
-    <div class="switch"><span>Показывать, что я рядом<div class="row-sub sub" style="font-size:12px;color:var(--moss);margin-top:2px">Отметка гаснет через 6 часов</div></span>
-      <button class="tog" id="me-geo"></button></div>
-    <input class="fld" style="margin-top:11px" id="me-place" placeholder="Место, например Bang Tao Beach Club">
+    <div id="me-pres-now" class="presnow" hidden></div>
+    <p style="font-size:13.5px;color:var(--moss);line-height:1.55;margin:9px 0 11px">
+      Впишите место — и вас увидят те, кто отметился так же. Отметка гаснет через 6 часов.</p>
+    <input class="fld" id="me-place" placeholder="Например: Bang Tao Beach Club">
     <button class="btn ghost" style="margin-top:9px" id="me-place-go">Отметиться</button>
+    <div class="switch" style="margin-top:16px"><span>Добавить геолокацию<div class="sub"
+      style="font-size:12px;color:var(--moss);margin-top:2px">Покажет тех, кто в пределах 5 км</div></span>
+      <button class="tog" id="me-geo"></button></div>
+    <button class="btn ghost" style="margin-top:11px" id="me-pres-off" hidden>Снять отметку</button>
   </div>
 
   <div class="sect">
