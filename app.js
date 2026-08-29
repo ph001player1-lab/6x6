@@ -1,9 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
+const CHAT = 'https://t.me/Members_6x6';           // общий чат участников
+const SUPPORT = 'ВСТАВЬ_НИК_ДЛЯ_ПОДДЕРЖКИ';        // без @, сюда пишут при поломках
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -114,6 +116,7 @@ $('#q-next').onclick = async () => {
   try {
     await loadAll();
     $('#nav').hidden = false; $('#top').hidden = false;
+    fitNav();
     go('p-match');
     toast('Готово. Смотрите, с кем совпали');
   } catch (e) {
@@ -348,10 +351,45 @@ const notifyToggle = async () => {
 $('#me-n6').onclick = (e) => { e.target.classList.toggle('on'); notifyToggle(); };
 $('#me-n5').onclick = (e) => { e.target.classList.toggle('on'); notifyToggle(); };
 
+const inviteLink = () => `https://t.me/${BOT}?start=${S.inviteCode}`;
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* см. ниже */ }
+  try {                       // в вебвью Telegram буфер обмена часто закрыт
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch { return false; }
+}
+
 $('#me-invite').onclick = async () => {
-  const link = `https://t.me/${BOT}/app?startapp=${S.inviteCode}`;
-  try { await navigator.clipboard.writeText(link); toast('Ссылка скопирована'); }
-  catch { tg?.openTelegramLink?.(`https://t.me/share/url?url=${encodeURIComponent(link)}`); }
+  if (!S.inviteCode) return toast('Ссылка ещё не загрузилась');
+  const ok = await copyText(inviteLink());
+  toast(ok ? 'Ссылка скопирована' : 'Скопируйте вручную — ссылка выше на экране', 3600);
+};
+
+$('#me-share').onclick = () => {
+  if (!S.inviteCode) return toast('Ссылка ещё не загрузилась');
+  const text = 'Шесть вопросов — и видно, с кем ты совпадаешь и по каким сферам жизни.';
+  tg?.openTelegramLink?.(
+    `https://t.me/share/url?url=${encodeURIComponent(inviteLink())}&text=${encodeURIComponent(text)}`);
+};
+
+$('#me-chat').onclick = () => {
+  haptic();
+  tg?.openTelegramLink ? tg.openTelegramLink(CHAT) : window.open(CHAT, '_blank');
+};
+
+$('#me-help').onclick = () => {
+  haptic();
+  if (/ВСТАВЬ/.test(SUPPORT)) return toast('Поддержка пока не настроена');
+  const url = `https://t.me/${SUPPORT}`;
+  tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank');
 };
 
 /* ── вкладка «Улей» ── */
@@ -430,6 +468,13 @@ function scan() {
 }
 
 /* ── навигация ── */
+function fitNav() {
+  const n = $('#nav');
+  if (!n || n.hidden) return;
+  document.documentElement.style.setProperty('--navh', n.offsetHeight + 'px');
+}
+addEventListener('resize', fitNav);
+
 function go(id) {
   pane('#' + id);
   $$('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.go === id));
@@ -453,11 +498,13 @@ async function loadAll() {
   try {
     const inv = await rpc('my_invite');
     S.inviteCode = inv.code;
+    $('#me-inv-link').textContent = inviteLink();
     $('#me-inv-txt').textContent = inv.invited
       ? `По вашей ссылке пришло ${inv.invited}. Чем больше в улье, тем выше шанс на шесть из шести.`
       : 'Чем больше людей в улье, тем выше у каждого шанс встретить своё шесть из шести.';
   } catch {
     $('#me-inv-txt').textContent = 'Ссылка сейчас недоступна, попробуйте позже.';
+    $('#me-inv-link').textContent = '—';
   }
   return true;
 }
@@ -497,6 +544,7 @@ async function loadAll() {
     const ready = await loadAll();
     if (ready) {
       $('#nav').hidden = false; $('#top').hidden = false;
+      fitNav();
       go('p-match');
     } else {
       pane('#p-intro');            // шапку и вкладки покажем после шести ответов
