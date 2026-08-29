@@ -1,9 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /* ═══ НАСТРОЙКА — заполнить после развёртывания ═══ */
-const SUPABASE_URL = 'https://adwtatwdrgilvktkmike.supabase.co';        // https://xxxx.supabase.co
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkd3RhdHdkcmdpbHZrdGttaWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5NTA3NjEsImV4cCI6MjEwMzUyNjc2MX0.zDKDfp82YTVu8JMzQNx3m5DsUx0Kku9nRCBHKSFQuPY';
-const BOT = 'six_by_six_bot';                     // без @
+const SUPABASE_URL = 'ВСТАВЬ_URL_ПРОЕКТА';        // https://xxxx.supabase.co
+const SUPABASE_ANON = 'ВСТАВЬ_ANON_KEY';
+const BOT = 'ВСТАВЬ_ИМЯ_БОТА';                     // без @
 /* ════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
@@ -105,10 +105,21 @@ $('#q-next').onclick = async () => {
       a: draft, p_username: S.me.username, p_first_name: S.me.first_name,
       p_photo: S.me.photo_url, p_invite: S.invite,
     });
-    haptic('ok'); editing = false;
-    await loadAll(); go('p-match');
+  } catch (e) {
+    toast('Ответы не сохранились: ' + e.message);
+    btn.disabled = false; renderQuestion();
+    return;
+  }
+  haptic('ok'); editing = false;
+  try {
+    await loadAll();
+    $('#nav').hidden = false; $('#top').hidden = false;
+    go('p-match');
     toast('Готово. Смотрите, с кем совпали');
-  } catch (e) { toast('Не сохранилось: ' + e.message); btn.disabled = false; renderQuestion(); }
+  } catch (e) {
+    // ответы уже в базе — виновата загрузка, а не сохранение
+    toast('Ответы сохранены, но экран не загрузился: ' + e.message, 4200);
+  }
 };
 $('#q-back').onclick = () => { qi--; renderQuestion(); };
 $('#i-next').onclick = () => pane('#p-brief');
@@ -398,11 +409,17 @@ async function loadAll() {
   $('#nav [data-go="p-admin"]').hidden = !S.admin;
   $('#nav').className = S.admin ? 'n4' : 'n3';
   renderMatches();
-  const inv = await rpc('my_invite');
-  S.inviteCode = inv.code;
-  $('#me-inv-txt').textContent = inv.invited
-    ? `По вашей ссылке пришло ${inv.invited}. Чем больше в улье, тем выше шанс на шесть из шести.`
-    : 'Чем больше людей в улье, тем выше у каждого шанс встретить своё шесть из шести.';
+
+  // Приглашение — не повод не пустить человека внутрь, если оно не загрузилось.
+  try {
+    const inv = await rpc('my_invite');
+    S.inviteCode = inv.code;
+    $('#me-inv-txt').textContent = inv.invited
+      ? `По вашей ссылке пришло ${inv.invited}. Чем больше в улье, тем выше шанс на шесть из шести.`
+      : 'Чем больше людей в улье, тем выше у каждого шанс встретить своё шесть из шести.';
+  } catch {
+    $('#me-inv-txt').textContent = 'Ссылка сейчас недоступна, попробуйте позже.';
+  }
   if (S.summary.pending_in) {
     $('#nav [data-go="p-match"]').insertAdjacentHTML('beforeend', '<span class="dot"></span>');
   }
@@ -451,6 +468,8 @@ async function loadAll() {
 
   } catch (e) {
     $('#p-load').innerHTML =
-      `<div class="empty" style="padding-top:30vh">Не получилось открыть.<br><br>${e.message}</div>`;
+      `<div class="empty" style="padding-top:26vh">Не получилось открыть.<br><br>${e.message}</div>
+       <div class="sticky"><button class="btn ghost" id="retry">Попробовать снова</button></div>`;
+    $('#retry').onclick = () => location.reload();
   }
 })();
