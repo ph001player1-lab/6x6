@@ -33,7 +33,7 @@ async function loadConfig() {
   }
 }
 
-const APP_VERSION = 14;
+const APP_VERSION = 15;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -182,7 +182,7 @@ $('#q-next').onclick = async () => {
   haptic('ok'); editing = false;
   try {
     await loadAll();
-    if (!S.summary.me.bot_ok) { showGate(); return; }
+    if (REQUIRE_NOTIFY && !S.summary.me.bot_ok) { showGate(); return; }
     $('#nav').hidden = false; $('#top').hidden = false;
     fitNav();
     go('p-match');
@@ -205,61 +205,56 @@ function showGate() {
   const hint = $('#gate-hint'), check = $('#gate-check'), skip = $('#gate-skip');
   hint.hidden = true;
   check.hidden = true;
-  skip.hidden = REQUIRE_NOTIFY;      // выход есть только когда запрет отключён в настройках
+  skip.hidden = REQUIRE_NOTIFY;      // выход есть только когда запрет снят в настройках
 
-  const say = (text) => { hint.textContent = text; hint.hidden = false; };
+  const say = (t) => { hint.textContent = t; hint.hidden = false; };
 
   const enter = () => {
+    renderMatches();                 // иначе подсказка «включите уведомления» останется от прошлой отрисовки
     $('#nav').hidden = false; $('#top').hidden = false;
     fitNav(); go('p-match');
   };
 
-  const done = async () => {
-    try { await rpc('grant_notifications'); } catch { /* подтвердит рассылка */ }
-    S.summary.me.bot_ok = true;
-    enter();
-    toast('Уведомления включены');
+  /* Флаг ставит бот, когда получает «Старт». Верить окну разрешений на слово
+     нельзя: оно отвечает «да» ещё до того, как до человека реально дошло
+     сообщение, и подсказка потом всплывает снова. */
+  const recheck = async (quiet) => {
+    try {
+      await loadAll();
+      if (S.summary.me.bot_ok) { enter(); toast('Уведомления включены'); return true; }
+      if (!quiet) say('Пока не видим разрешения. Откройте чат с ботом, нажмите «Старт» ' +
+                      'и вернитесь сюда.');
+    } catch (e) { if (!quiet) toast(e.message); }
+    return false;
   };
 
   $('#gate-go').onclick = () => {
-    if (!tg?.requestWriteAccess) {
-      return say('Ваша версия Telegram не умеет спрашивать разрешение прямо здесь. ' +
-                 'Откройте чат с ботом и нажмите «Старт» — это то же самое.');
-    }
-    tg.requestWriteAccess((granted) => {
-      if (granted) return done();
-      check.hidden = false;
-      say('Без разрешения дальше нельзя. Второй раз Telegram это окно может не показать — ' +
-          'тогда откройте чат с ботом и нажмите «Старт».');
-    });
-  };
-
-  // Нажатие «Старт» в боте выдаёт разрешение всегда — это запасной путь без тупика
-  $('#gate-bot').onclick = () => {
+    haptic();
     check.hidden = false;
-    const url = `https://t.me/${BOT}?start=notify`;
-    try { tg?.openTelegramLink?.(url); } catch { window.open(url, '_blank'); }
+    openTelegram(BOT, 'notify');
+    say('Нажмите в чате «Старт» и возвращайтесь — проверим автоматически.');
   };
 
-  // На части клиентов приложение не закрывается при переходе в чат,
-  // поэтому нужна кнопка «перепроверить», иначе человек застрянет на экране.
   $('#gate-check').onclick = async () => {
     const b = $('#gate-check'); b.disabled = true; b.textContent = 'Проверяем…';
-    try {
-      await loadAll();
-      if (S.summary.me.bot_ok) { enter(); toast('Уведомления включены'); return; }
-      say('Пока не видим разрешения. Откройте чат с ботом и нажмите «Старт», ' +
-          'затем вернитесь и проверьте снова.');
-    } catch (e) { toast(e.message); }
+    await recheck(false);
     b.disabled = false; b.textContent = 'Я нажал «Старт» — проверить';
   };
 
   $('#gate-skip').onclick = enter;
 
+  // Возврат из чата с ботом — самый частый момент, когда всё уже готово
+  S.gateWatch = () => { if (!document.hidden) recheck(true); };
+
   pane('#p-gate');
 }
 
-/* ── вкладка «Совпадения» ── */
+/* Проверяем разрешение, когда человек возвращается в приложение из чата. */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && $('#p-gate').classList.contains('on') && S.gateWatch) S.gateWatch();
+});
+
+/* ── вкладка «Совпадения» ── *//* ── вкладка «Совпадения» ── */
 function renderMatches() {
   const d = S.summary, b = d.buckets ?? {}, best = d.best ?? 0;
   const hits = Array(6).fill(0).map((_, i) => (i < best ? 1 : 0));
@@ -403,8 +398,8 @@ $('#l-back').onclick = popOverlay;
 
 /* На iOS openTelegramLink иногда молча ничего не делает. Пробуем по очереди:
    штатный вызов, затем схему tg://, затем просто копируем ник. */
-function openTelegram(nick) {
-  const web = `https://t.me/${nick}`;
+function openTelegram(nick, start) {
+  const web = `https://t.me/${nick}` + (start ? `?start=${start}` : '');
   let left = false;
   const mark = () => { left = true; };
   document.addEventListener('visibilitychange', mark, { once: true });
@@ -415,7 +410,9 @@ function openTelegram(nick) {
 
   setTimeout(() => {
     if (gone()) return;
-    try { location.href = `tg://resolve?domain=${nick}`; } catch { /* см. ниже */ }
+    try {
+      location.href = `tg://resolve?domain=${nick}` + (start ? `&start=${start}` : '');
+    } catch { /* см. ниже */ }
     setTimeout(async () => {
       if (gone()) return;
       const ok = await copyText('@' + nick);

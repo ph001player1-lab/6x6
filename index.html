@@ -278,13 +278,14 @@ nav[hidden],header[hidden]{display:none}
     <h2>Включите уведомления</h2>
     <p class="key">Без них вы не узнаете, что кто-то захотел с вами общаться. Запрос на контакт
       придёт в Telegram — иначе он останется незамеченным.</p>
+    <p>Кнопка откроет чат с ботом. Нажмите там <b style="color:var(--chalk)">«Старт»</b>
+      и возвращайтесь — этого достаточно.</p>
     <p>Приходить будет только по делу: запрос на контакт и новое совпадение 6 из 6.
       Отключить можно в любой момент на вкладке «Я».</p>
     <p id="gate-hint" style="color:var(--honey)" hidden></p>
   </div>
   <div class="sticky">
-    <button class="btn" id="gate-go">Разрешить</button>
-    <button class="btn ghost" id="gate-bot">Открыть чат с ботом</button>
+    <button class="btn" id="gate-go">Разрешить уведомления</button>
     <button class="btn ghost" id="gate-check" hidden>Я нажал «Старт» — проверить</button>
     <button class="btn ghost" id="gate-skip" hidden>Продолжить без уведомлений</button>
   </div>
@@ -422,7 +423,7 @@ nav[hidden],header[hidden]{display:none}
 
 <div class="toast" id="toast"></div>
 
-<script src="qr.js?v=14"></script>
-<script type="module" src="app.js?v=14"></script>
+<script src="qr.js?v=15"></script>
+<script type="module" src="app.js?v=15"></script>
 </body>
 </html>
