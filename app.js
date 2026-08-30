@@ -1,7 +1,7 @@
 /* Настройки лежат в config.json и грузятся мимо кеша: иначе браузер
    надолго запоминает файл, скачанный до того, как его заполнили. */
 let SUPABASE_URL = '', SUPABASE_ANON = '', BOT = '';
-let CHAT = 'https://t.me/Members_6x6', SUPPORT = '';
+let CHAT = 'https://t.me/Members_6x6', SUPPORT = '', REQUIRE_NOTIFY = true;
 
 async function loadConfig() {
   let c;
@@ -18,6 +18,7 @@ async function loadConfig() {
   BOT           = clean(c.BOT).replace(/^@/, '');
   CHAT          = clean(c.CHAT) || CHAT;
   SUPPORT       = clean(c.SUPPORT).replace(/^@/, '');
+  REQUIRE_NOTIFY = c.REQUIRE_NOTIFICATIONS !== false;
 
   /* Значение заголовка обязано быть латиницей: незаполненная настройка
      кириллицей роняет fetch невнятной ошибкой про ISO-8859-1. */
@@ -32,7 +33,7 @@ async function loadConfig() {
   }
 }
 
-const APP_VERSION = 12;
+const APP_VERSION = 14;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -181,6 +182,7 @@ $('#q-next').onclick = async () => {
   haptic('ok'); editing = false;
   try {
     await loadAll();
+    if (!S.summary.me.bot_ok) { showGate(); return; }
     $('#nav').hidden = false; $('#top').hidden = false;
     fitNav();
     go('p-match');
@@ -193,6 +195,69 @@ $('#q-next').onclick = async () => {
 $('#q-back').onclick = () => { qi--; renderQuestion(); };
 $('#i-next').onclick = () => pane('#p-brief');
 $('#b-start').onclick = () => { qi = 0; renderQuestion(); pane('#p-quiz'); };
+
+/* ── ворота: без разрешения на сообщения дальше не пускаем ──
+   Выдать разрешение за человека нельзя, но можно спросить штатным окном
+   Telegram — оно показывается прямо в приложении. Если клиент старый или
+   человек уже отказывался, окно не появится: тогда ведём в чат с ботом. */
+function showGate() {
+  $('#gate-ros').innerHTML = rosette([1, 1, 1, 1, 1, 1], 56, { jack: true });
+  const hint = $('#gate-hint'), check = $('#gate-check'), skip = $('#gate-skip');
+  hint.hidden = true;
+  check.hidden = true;
+  skip.hidden = REQUIRE_NOTIFY;      // выход есть только когда запрет отключён в настройках
+
+  const say = (text) => { hint.textContent = text; hint.hidden = false; };
+
+  const enter = () => {
+    $('#nav').hidden = false; $('#top').hidden = false;
+    fitNav(); go('p-match');
+  };
+
+  const done = async () => {
+    try { await rpc('grant_notifications'); } catch { /* подтвердит рассылка */ }
+    S.summary.me.bot_ok = true;
+    enter();
+    toast('Уведомления включены');
+  };
+
+  $('#gate-go').onclick = () => {
+    if (!tg?.requestWriteAccess) {
+      return say('Ваша версия Telegram не умеет спрашивать разрешение прямо здесь. ' +
+                 'Откройте чат с ботом и нажмите «Старт» — это то же самое.');
+    }
+    tg.requestWriteAccess((granted) => {
+      if (granted) return done();
+      check.hidden = false;
+      say('Без разрешения дальше нельзя. Второй раз Telegram это окно может не показать — ' +
+          'тогда откройте чат с ботом и нажмите «Старт».');
+    });
+  };
+
+  // Нажатие «Старт» в боте выдаёт разрешение всегда — это запасной путь без тупика
+  $('#gate-bot').onclick = () => {
+    check.hidden = false;
+    const url = `https://t.me/${BOT}?start=notify`;
+    try { tg?.openTelegramLink?.(url); } catch { window.open(url, '_blank'); }
+  };
+
+  // На части клиентов приложение не закрывается при переходе в чат,
+  // поэтому нужна кнопка «перепроверить», иначе человек застрянет на экране.
+  $('#gate-check').onclick = async () => {
+    const b = $('#gate-check'); b.disabled = true; b.textContent = 'Проверяем…';
+    try {
+      await loadAll();
+      if (S.summary.me.bot_ok) { enter(); toast('Уведомления включены'); return; }
+      say('Пока не видим разрешения. Откройте чат с ботом и нажмите «Старт», ' +
+          'затем вернитесь и проверьте снова.');
+    } catch (e) { toast(e.message); }
+    b.disabled = false; b.textContent = 'Я нажал «Старт» — проверить';
+  };
+
+  $('#gate-skip').onclick = enter;
+
+  pane('#p-gate');
+}
 
 /* ── вкладка «Совпадения» ── */
 function renderMatches() {
@@ -803,7 +868,10 @@ async function loadAll() {
     if (!S.opts.length) throw new Error('Справочник вопросов пуст — выполните schema.sql');
 
     const ready = await loadAll();
-    if (ready) {
+    if (ready && REQUIRE_NOTIFY && !S.summary.me.bot_ok) {
+      showGate();                       // проверяем при каждом запуске
+      [80, 300, 800].forEach((ms) => setTimeout(fitNav, ms));
+    } else if (ready) {
       $('#nav').hidden = false; $('#top').hidden = false;
       fitNav();
       [80, 300, 800].forEach((ms) => setTimeout(fitNav, ms));   // окно устаканивается не сразу
