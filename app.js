@@ -33,7 +33,7 @@ async function loadConfig() {
   }
 }
 
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -147,7 +147,10 @@ const table = (name, query) => dbFetch(name + '?' + (query ?? 'select=*'), { hea
 /* ── опрос ── */
 function renderQuestion() {
   const ax = qi + 1;
-  const opts = S.opts.filter((o) => o.axis === ax).sort((a, b) => a.val - b.val);
+  // Порядок показа задаёт sort: номера вариантов менять нельзя, иначе
+  // у всех разом поедут сохранённые ответы.
+  const opts = S.opts.filter((o) => o.axis === ax)
+    .sort((a, b) => (a.sort ?? a.val) - (b.sort ?? b.val));
   $('#q-step').textContent = `Вопрос ${ax} из 6`;
   $('#q-fill').style.width = `${ax / 6 * 100}%`;
   $('#q-title').textContent = QUESTIONS[qi];
@@ -255,14 +258,17 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ── вкладка «Совпадения» ── *//* ── вкладка «Совпадения» ── */
-function renderMatches() {
-  const d = S.summary, b = d.buckets ?? {}, best = d.best ?? 0;
-  const hits = Array(6).fill(0).map((_, i) => (i < best ? 1 : 0));
+function myQr() {
+  return QR.svg(`6x6|${S.me.tg_id}|${S.answers.join('')}`,
+    { dark: '#070B0A', light: '#E7EFE9', quiet: 2 });
+}
 
-  $('#m-hero').className = 'hero' + (best === 6 ? ' jack' : '');
-  $('#m-hero').innerHTML =
-    `<div style="width:76px;flex:none">${rosette(hits, 76, { jack: best === 6 })}</div>
-     <div><div class="num">${best}</div><div class="of">ЛУЧШЕЕ СОВПАДЕНИЕ</div></div>`;
+function renderMatches() {
+  const d = S.summary, b = d.buckets ?? {};
+
+  // QR виден сразу на главном экране: на вкладку «Я» доходят не все
+  $('#m-qr').innerHTML = myQr();
+  $('#m-code').textContent = d.me?.code ?? '';
 
   $('#m-scores').innerHTML = [6, 5, 4, 3].map((n) => {
     const c = b[n] ?? 0;
@@ -502,8 +508,7 @@ $('#pr-close').onclick = popOverlay;
 /* ── вкладка «Я» ── */
 function renderMe() {
   const a = S.answers;
-  $('#me-qr').innerHTML = QR.svg(`6x6|${S.me.tg_id}|${a.join('')}`,
-    { dark: '#070B0A', light: '#E7EFE9', quiet: 2 });
+  $('#me-qr').innerHTML = myQr();
   $('#me-code').textContent = S.summary.me.code;
   $('#me-answers').innerHTML = a.map((v, i) => `
     <div class="row" style="cursor:default"><span style="font-size:17px;width:24px;flex:none">${ICONS[i]}</span>
@@ -697,7 +702,7 @@ async function renderAdmin() {
       ['Игроков', a.total],
       ['За сутки', a.day],
       ['За неделю', a.week],
-      ['Заселено конфигураций', `${a.configs_used} из 30 240`],
+      ['Заселено конфигураций', `${a.configs_used} из 45 360`],
       ['Пар 6 из 6 в базе', a.jackpots],
       ['Из них уже списались', a.jackpots_met],
       ['Запросов на контакт', a.requests],
@@ -744,7 +749,7 @@ $('#scan-me').onclick = () => scan();
 function scan() {
   if (!tg?.showScanQrPopup) return toast('Сканер работает только внутри Telegram');
   tg.showScanQrPopup({ text: 'Наведите на код другого игрока' }, (txt) => {
-    const m = String(txt ?? '').match(/^6x6\|(\d+)\|([1-7]{6})$/);
+    const m = String(txt ?? '').match(/^6x6\|(\d+)\|([1-9]{6})$/);
     if (!m) { toast('Это не код игрока 6×6'); return false; }
     if (m[1] === String(S.me.tg_id)) { toast('Это ваш собственный код'); return false; }
     tg.closeScanQrPopup();
@@ -861,7 +866,7 @@ async function loadAll() {
     S.token = auth.token;
     S.invite = auth.start_param ?? null;
 
-    S.opts = await table('axis_options', 'select=*&order=axis,val');
+    S.opts = await table('axis_options', 'select=*&order=axis,sort,val');
     if (!S.opts.length) throw new Error('Справочник вопросов пуст — выполните schema.sql');
 
     const ready = await loadAll();

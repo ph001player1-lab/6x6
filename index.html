@@ -227,6 +227,10 @@ nav[hidden],header[hidden]{display:none}
 .limitline b{color:var(--honey)}
 .limitline.out b{color:#D98080}
 .diag{font-family:var(--mono);font-size:10px;line-height:1.7;color:#3C5548;text-align:center;padding:26px 0 4px;word-break:break-word}
+.qrtop{text-align:center;padding:4px 0 18px}
+.qrtop .qr{width:min(44vw,164px)}
+.qrcode{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--honey);
+  margin-top:7px;word-break:break-word}
 .qr{width:min(58vw,208px);margin:0 auto;background:var(--chalk);border-radius:13px;padding:9px}
 </style>
 </head>
@@ -308,7 +312,11 @@ nav[hidden],header[hidden]{display:none}
 
 <!-- СОВПАДЕНИЯ -->
 <div class="pane" id="p-match">
-  <div class="hero" id="m-hero"></div>
+  <div class="qrtop">
+    <div class="qr" id="m-qr"></div>
+    <div class="lbl" style="margin-top:11px">дай себя отсканировать</div>
+    <div class="qrcode" id="m-code"></div>
+  </div>
   <div class="rows" id="m-inbox" hidden></div>
   <div class="rows" id="m-notify" hidden></div>
   <button class="btn two scan" id="scan-main"><span class="gl">⬡</span><span><b>Сканировать</b><i>код другого игрока при личной встрече</i></span></button>
@@ -423,7 +431,7 @@ nav[hidden],header[hidden]{display:none}
 
 <div class="toast" id="toast"></div>
 
-<script src="qr.js?v=15"></script>
-<script type="module" src="app.js?v=15"></script>
+<script src="qr.js?v=16"></script>
+<script type="module" src="app.js?v=16"></script>
 </body>
 </html>
