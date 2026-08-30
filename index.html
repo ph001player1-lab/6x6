@@ -111,6 +111,7 @@ header h1{font-family:var(--display);font-size:15px;font-weight:700;margin:0;let
 .card .nick{text-align:center;font-family:var(--mono);font-size:13px;color:var(--honey);
   margin-top:5px;cursor:pointer;padding:6px}
 .card .nick:active{opacity:.6}
+.prhint{font-size:12.5px;color:var(--moss);text-align:center;line-height:1.45;margin:11px 4px 0}
 .axlist{margin:28px 0;border-top:1px solid var(--line)}
 .ax{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--line);font-size:14px}
 .ax .ic{width:22px;text-align:center;font-size:15px;flex:none}
@@ -418,6 +419,7 @@ nav[hidden],header[hidden]{display:none}
   <div class="nick" id="pr-nick"></div>
   <div class="axlist" id="pr-axes"></div>
   <button class="btn" id="pr-act"></button>
+  <div class="prhint" id="pr-hint" hidden>Не открылось? Нажмите на @ник выше — он скопируется</div>
   <button class="btn ghost" id="pr-act2" hidden></button>
   <button class="btn ghost" id="pr-close">Закрыть</button>
 </div></div>
@@ -431,7 +433,7 @@ nav[hidden],header[hidden]{display:none}
 
 <div class="toast" id="toast"></div>
 
-<script src="qr.js?v=17"></script>
-<script type="module" src="app.js?v=17"></script>
+<script src="qr.js?v=19"></script>
+<script type="module" src="app.js?v=19"></script>
 </body>
 </html>

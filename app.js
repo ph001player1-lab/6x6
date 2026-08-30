@@ -33,7 +33,7 @@ async function loadConfig() {
   }
 }
 
-const APP_VERSION = 17;
+const APP_VERSION = 19;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -402,30 +402,22 @@ async function openList(kind, value, title) {
 }
 $('#l-back').onclick = popOverlay;
 
-/* На iOS openTelegramLink иногда молча ничего не делает. Пробуем по очереди:
-   штатный вызов, затем схему tg://, затем просто копируем ник. */
+/* Открыть чат. Раньше здесь стояли таймеры: если приложение не ушло
+   с экрана за полторы секунды, считалось, что чат не открылся. Но Telegram
+   на Android показывает чат поверх мини-аппа, не скрывая его, — и приложение
+   ругалось на пустом месте. Определить успех изнутри нельзя, поэтому
+   не гадаем: запасной путь остаётся, но человек выбирает его сам. */
 function openTelegram(nick, start) {
-  const web = `https://t.me/${nick}` + (start ? `?start=${start}` : '');
-  let left = false;
-  const mark = () => { left = true; };
-  document.addEventListener('visibilitychange', mark, { once: true });
-  addEventListener('pagehide', mark, { once: true });
-  const gone = () => left || document.hidden;
-
-  try { tg?.openTelegramLink?.(web); } catch { /* запасные пути ниже */ }
-
-  setTimeout(() => {
-    if (gone()) return;
-    try {
-      location.href = `tg://resolve?domain=${nick}` + (start ? `&start=${start}` : '');
-    } catch { /* см. ниже */ }
-    setTimeout(async () => {
-      if (gone()) return;
-      const ok = await copyText('@' + nick);
-      toast(ok ? `Чат не открылся. Ник @${nick} скопирован — вставьте в поиск Telegram`
-               : `Чат не открылся. Ник: @${nick}`, 5200);
-    }, 800);
-  }, 700);
+  const url = `https://t.me/${nick}` + (start ? `?start=${start}` : '');
+  if (tg?.openTelegramLink) {
+    try { tg.openTelegramLink(url); return; } catch { /* ниже обычное окно */ }
+  }
+  const w = window.open(url, '_blank');
+  if (!w) {                       // окно не открылось — это уже точный признак
+    copyText('@' + nick).then((ok) => toast(
+      ok ? `Не удалось открыть чат. Ник @${nick} скопирован — вставьте в поиск Telegram`
+         : `Не удалось открыть чат. Ник: @${nick}`, 5000));
+  }
 }
 
 /* ── карточка человека ── */
@@ -448,7 +440,8 @@ function openPerson(p) {
       <span class="tx">${h ? GAINS[i] : SPHERES[i] + ' — разошлись'}</span>
       <span class="mk">${h ? '✓' : '—'}</span></div>`).join('');
 
-  const act = $('#pr-act'), act2 = $('#pr-act2');
+  const act = $('#pr-act'), act2 = $('#pr-act2'), phint = $('#pr-hint');
+  phint.hidden = true;
   act.disabled = false; act2.hidden = true; act2.onclick = null;
 
   const answer = async (yes) => {
@@ -474,6 +467,7 @@ function openPerson(p) {
   } else if (p.contact_status === 'accepted') {
     act.textContent = 'Написать в Telegram';
     act.className = 'btn lit';
+    if (p.username) { phint.hidden = false; }
     act.onclick = () => p.username
       ? openTelegram(p.username)
       : toast('У человека нет ника в Telegram — он напишет вам сам', 4000);
