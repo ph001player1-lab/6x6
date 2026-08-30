@@ -33,7 +33,7 @@ async function loadConfig() {
   }
 }
 
-const APP_VERSION = 16;
+const APP_VERSION = 17;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -454,9 +454,11 @@ function openPerson(p) {
   const answer = async (yes) => {
     act.disabled = true;
     try {
-      await rpc('respond_contact', { req_id: p.contact_id, accept: yes });
+      // Ответ приносит свежие данные собеседника: в старой карточке ник ещё
+      // скрыт, и переиспользовать её нельзя — покажет «ника нет».
+      const fresh = await rpc('respond_contact', { req_id: p.contact_id, accept: yes });
       haptic('ok');
-      p.contact_status = yes ? 'accepted' : 'declined';
+      Object.assign(p, fresh, { contact_status: fresh.status });
       toast(yes ? 'Контакт открыт' : 'Отклонено');
       await loadAll(); openPerson(p);
     } catch (e) { toast(e.message); act.disabled = false; }
@@ -470,7 +472,7 @@ function openPerson(p) {
     act2.textContent = 'Отклонить';
     act2.onclick = () => answer(false);
   } else if (p.contact_status === 'accepted') {
-    act.textContent = p.username ? 'Написать в Telegram' : 'Контакт открыт';
+    act.textContent = 'Написать в Telegram';
     act.className = 'btn lit';
     act.onclick = () => p.username
       ? openTelegram(p.username)
@@ -489,7 +491,7 @@ function openPerson(p) {
       try {
         const r = await rpc('request_contact', { target: p.tg_id });
         haptic('ok');
-        p.contact_status = r.status;
+        Object.assign(p, r, { contact_status: r.status });
         toast(r.status === 'accepted'
           ? 'Контакт открыт — вы запросили друг друга'
           : 'Запрос ушёл. Придёт ответ — сообщим');
@@ -711,7 +713,7 @@ async function renderAdmin() {
       ['Сканов при встрече', a.scans],
       ['Отмечены «рядом» сейчас', a.presence_now],
       ['Бот доходит', `${a.bot_ok} из ${a.total}`],
-      ['Застряло в очереди', a.outbox_stuck],
+      ['Зависло в очереди', a.outbox_stuck],
     ];
     const unreachable = a.total - a.bot_ok;
     $('#a-stats').innerHTML = rows.map(([k, v]) =>
