@@ -6,8 +6,10 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
 <title>Шесть из шести</title>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700&family=Onest:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<!-- Шрифты подключаются не блокируя отрисовку: если домен недоступен,
+     приложение всё равно откроется системным шрифтом, а не белым экраном. -->
+<link rel="stylesheet" media="print" onload="this.media='all'"
+  href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700&family=Onest:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{
@@ -401,7 +403,7 @@ nav[hidden],header[hidden]{display:none}
 
 <div class="toast" id="toast"></div>
 
-<script src="qr.js?v=11"></script>
-<script type="module" src="app.js?v=11"></script>
+<script src="qr.js?v=12"></script>
+<script type="module" src="app.js?v=12"></script>
 </body>
 </html>

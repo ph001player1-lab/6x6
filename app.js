@@ -1,5 +1,3 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 /* Настройки лежат в config.json и грузятся мимо кеша: иначе браузер
    надолго запоминает файл, скачанный до того, как его заполнили. */
 let SUPABASE_URL = '', SUPABASE_ANON = '', BOT = '';
@@ -34,7 +32,7 @@ async function loadConfig() {
   }
 }
 
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -61,8 +59,7 @@ const GAINS = [
   'Общая картина мира',
 ];
 
-let sb = null;
-const S = { me: null, opts: null, summary: null, answers: [], admin: false, invite: null };
+const S = { me: null, token: null, opts: null, summary: null, answers: [], admin: false, invite: null };
 let qi = 0, draft = [], editing = false;
 
 /* ── мелочи ── */
@@ -114,12 +111,37 @@ function rosette(hits, size = 64, opts = {}) {
 const label = (axis, val) =>
   S.opts.find((o) => o.axis === axis && o.val === val)?.label ?? '—';
 
-/* ── обращения к базе ── */
-async function rpc(fn, args) {
-  const { data, error } = await sb.rpc(fn, args ?? {});
-  if (error) throw new Error(error.message);
+/* ── обращения к базе ──
+   Клиентская библиотека Supabase грузилась со стороннего CDN, а он доступен
+   не везде: если домен не открывается, модуль не выполняется и экран остаётся
+   пустым. Поэтому ходим в API напрямую — лишний домен приложению не нужен. */
+function dbHeaders(json) {
+  const h = { apikey: SUPABASE_ANON, Authorization: `Bearer ${S.token ?? SUPABASE_ANON}` };
+  if (json) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+async function dbFetch(path, init) {
+  let r;
+  try {
+    r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, init);
+  } catch {
+    throw new Error('Нет связи с сервером. Проверьте интернет и откройте заново');
+  }
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!r.ok) {
+    throw new Error((data && (data.message || data.hint || data.details)) || text || ('HTTP ' + r.status));
+  }
   return data;
 }
+
+const rpc = (fn, args) => dbFetch('rpc/' + fn, {
+  method: 'POST', headers: dbHeaders(true), body: JSON.stringify(args ?? {}),
+});
+
+const table = (name, query) => dbFetch(name + '?' + (query ?? 'select=*'), { headers: dbHeaders(false) });
 
 /* ── опрос ── */
 function renderQuestion() {
@@ -756,25 +778,28 @@ async function loadAll() {
 
     // Ключ anon сам по себе валидный JWT, поэтому функция работает
     // и со включённой проверкой токена — переключатель в панели не нужен.
-    const auth = await fetch(`${SUPABASE_URL}/functions/v1/auth`, {
+    let auth;
+    try {
+      auth = await fetch(`${SUPABASE_URL}/functions/v1/auth`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: SUPABASE_ANON,
         Authorization: `Bearer ${SUPABASE_ANON}`,
       },
-      body: JSON.stringify({ initData: tg?.initData ?? '' }),
-    }).then((r) => r.json());
+        body: JSON.stringify({ initData: tg?.initData ?? '' }),
+      }).then((r) => r.json());
+    } catch {
+      throw new Error('Сервер не отвечает. Возможно, у вашего провайдера нет к нему доступа — ' +
+                      'попробуйте другую сеть или мобильный интернет');
+    }
     if (auth.error) throw new Error(auth.error);
 
     S.me = auth.user;
+    S.token = auth.token;
     S.invite = auth.start_param ?? null;
-    sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
-      global: { headers: { Authorization: `Bearer ${auth.token}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
 
-    S.opts = await sb.from('axis_options').select('*').then((r) => r.data ?? []);
+    S.opts = await table('axis_options', 'select=*&order=axis,val');
     if (!S.opts.length) throw new Error('Справочник вопросов пуст — выполните schema.sql');
 
     const ready = await loadAll();
