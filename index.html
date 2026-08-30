@@ -219,6 +219,11 @@ nav[hidden],header[hidden]{display:none}
 .linkbox{font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--honey);
   background:var(--comb);border:1px solid var(--line);border-radius:12px;padding:13px;
   word-break:break-all;user-select:all;-webkit-user-select:all;margin-bottom:10px}
+.btn.danger{background:transparent;border:1px solid #5A2A2A;color:#D98080;font-weight:500}
+.btn.danger:active{background:rgba(200,80,80,.1)}
+.limitline{font-size:12.5px;color:var(--moss);line-height:1.5;margin:9px 2px 0;text-align:center}
+.limitline b{color:var(--honey)}
+.limitline.out b{color:#D98080}
 .diag{font-family:var(--mono);font-size:10px;line-height:1.7;color:#3C5548;text-align:center;padding:26px 0 4px;word-break:break-word}
 .qr{width:min(58vw,208px);margin:0 auto;background:var(--chalk);border-radius:13px;padding:9px}
 </style>
@@ -303,6 +308,7 @@ nav[hidden],header[hidden]{display:none}
     letter-spacing:.06em;padding-bottom:6px" id="me-code"></div>
   <div class="rows" id="me-answers"></div>
   <button class="btn ghost" style="margin-top:14px" id="me-edit">Изменить ответы</button>
+  <div class="limitline" id="me-limit"></div>
 
   <div class="sect">
     <span class="lbl">Я сейчас здесь</span>
@@ -340,6 +346,14 @@ nav[hidden],header[hidden]{display:none}
     <button class="btn ghost two" id="me-help">
       <span class="gl">🛟</span><span><b>Техподдержка</b><i>написать, если что-то не работает</i></span>
     </button>
+  </div>
+
+  <div class="sect">
+    <span class="lbl">Анкета</span>
+    <p style="font-size:13.5px;color:var(--moss);line-height:1.55;margin:9px 0 12px">
+      Удаление стирает ответы, открытые контакты и приглашения. Отменить нельзя —
+      придётся заводить анкету заново.</p>
+    <button class="btn danger" id="me-delete">Удалить анкету из базы</button>
   </div>
 
   <div class="diag" id="me-diag"></div>
@@ -387,7 +401,7 @@ nav[hidden],header[hidden]{display:none}
 
 <div class="toast" id="toast"></div>
 
-<script src="qr.js?v=10"></script>
-<script type="module" src="app.js?v=10"></script>
+<script src="qr.js?v=11"></script>
+<script type="module" src="app.js?v=11"></script>
 </body>
 </html>

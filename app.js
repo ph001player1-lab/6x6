@@ -34,7 +34,7 @@ async function loadConfig() {
   }
 }
 
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 const tg = window.Telegram?.WebApp;
 /* expand() и запрет свайпов придуманы для телефонов: на компьютере expand()
    раздувает окно Telegram Desktop так, что его нельзя ни свернуть, ни сдвинуть. */
@@ -151,7 +151,8 @@ $('#q-next').onclick = async () => {
       p_photo: S.me.photo_url, p_invite: S.invite,
     });
   } catch (e) {
-    toast('Ответы не сохранились: ' + e.message);
+    const msg = String(e.message || '');
+    toast(/Лимит исчерпан/.test(msg) ? msg : 'Ответы не сохранились: ' + msg, 5200);
     btn.disabled = false; renderQuestion();
     return;
   }
@@ -423,6 +424,21 @@ function renderMe() {
   $('#me-answers').innerHTML = a.map((v, i) => `
     <div class="row" style="cursor:default"><span style="font-size:17px;width:24px;flex:none">${ICONS[i]}</span>
       <div class="grow">${label(i + 1, v)}<div class="sub">${SPHERES[i]}</div></div></div>`).join('');
+  const left = S.summary.me.changes_left ?? 3;
+  const lim = S.summary.me.changes_limit ?? 3;
+  const freeAt = S.summary.me.changes_free_at;
+  const ln = $('#me-limit');
+  ln.classList.toggle('out', left === 0);
+  if (left > 0) {
+    ln.innerHTML = `Осталось изменений: <b>${left}</b> из ${lim} за 30 дней`;
+    $('#me-edit').disabled = false;
+  } else {
+    const d = freeAt ? new Date(freeAt).toLocaleDateString('ru-RU',
+      { day: 'numeric', month: 'long' }) : null;
+    ln.innerHTML = `<b>Лимит исчерпан</b>${d ? ' — следующая попытка ' + d : ''}`;
+    $('#me-edit').disabled = true;
+  }
+
   $('#me-n6').classList.toggle('on', S.summary.me.notify_6);
   $('#me-n5').classList.toggle('on', S.summary.me.notify_5);
 
@@ -438,9 +454,26 @@ function renderMe() {
 }
 
 $('#me-edit').onclick = () => {
+  if ((S.summary?.me?.changes_left ?? 3) <= 0) {
+    return toast('Лимит изменений на этот месяц исчерпан', 3400);
+  }
   editing = true; qi = 0; draft = S.answers.slice();
   renderQuestion(); pane('#p-quiz');
-  toast('Отвечайте как хотите, а не как сложилось', 3600);
+  toast('Отвечайте как хотите, а не как сложилось. Если оставите как есть — попытка не потратится', 5000);
+};
+
+$('#me-delete').onclick = () => {
+  const ask = 'Удалить анкету?\n\nОтветы, открытые контакты и приглашения будут стёрты. ' +
+              'Восстановить не получится.';
+  const go = async () => {
+    try {
+      await rpc('delete_me');
+      try { tg?.showAlert?.('Анкета удалена.'); } catch { /* нет попапа — просто перезагрузим */ }
+      location.reload();
+    } catch (e) { toast('Не удалось удалить: ' + e.message, 4200); }
+  };
+  if (tg?.showConfirm) tg.showConfirm(ask, (ok) => { if (ok) go(); });
+  else if (confirm(ask)) go();
 };
 
 $('#me-geo').onclick = async () => {
